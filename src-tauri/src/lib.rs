@@ -285,23 +285,31 @@ fn check_update() -> Option<(String, String, String)> {
 // 설치파일 다운로드 후 실행
 #[tauri::command]
 fn download_and_install(app: tauri::AppHandle, download_url: String) -> Result<(), String> {
-    // 고유 파일명으로 충돌 방지
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
-    let temp = std::env::temp_dir().join(format!("AI-Browser-setup-{}.exe", timestamp));
+    let setup_path = std::env::temp_dir().join(format!("AI-Browser-setup-{}.exe", timestamp));
+    let bat_path = std::env::temp_dir().join(format!("AI-Browser-update-{}.bat", timestamp));
+
     let resp = ureq::get(&download_url)
         .set("User-Agent", "AI-Browser")
         .call()
         .map_err(|e| format!("다운로드 실패: {}", e))?;
-    let mut file = fs::File::create(&temp).map_err(|e| format!("파일 생성 실패: {}", e))?;
+    let mut file = fs::File::create(&setup_path).map_err(|e| format!("파일 생성 실패: {}", e))?;
     std::io::copy(&mut resp.into_reader(), &mut file).map_err(|e| format!("저장 실패: {}", e))?;
-    // 파일 핸들 닫기
     drop(file);
 
-    // 인스톨러 실행 후 앱 종료
-    std::process::Command::new(&temp)
+    // bat 스크립트: 2초 대기 후 인스톨러 실행 (파일 잠금 해제 대기)
+    let script = format!(
+        "@echo off\r\nping 127.0.0.1 -n 3 >nul\r\nstart \"\" \"{}\"\r\ndel \"%~f0\"\r\n",
+        setup_path.to_string_lossy()
+    );
+    fs::write(&bat_path, &script).map_err(|e| format!("스크립트 생성 실패: {}", e))?;
+
+    std::process::Command::new("cmd")
+        .args(["/C", "start", "", &bat_path.to_string_lossy()])
         .spawn()
         .map_err(|e| format!("실행 실패: {}", e))?;
+
     app.exit(0);
     Ok(())
 }
