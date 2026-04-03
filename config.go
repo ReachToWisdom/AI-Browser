@@ -4,8 +4,21 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
+
+// URL 정규화 (프로토콜 없으면 https:// 추가)
+func normalizeURL(u string) string {
+	u = strings.TrimSpace(u)
+	if u == "" {
+		return u
+	}
+	if !strings.Contains(u, "://") {
+		return "https://" + u
+	}
+	return u
+}
 
 // 탭 설정
 type TabItem struct {
@@ -139,6 +152,8 @@ func addTabWithColor(name, url string, color uint32) int {
 	if color == 0 {
 		color = 0x00888888
 	}
+	// URL에 프로토콜이 없으면 https:// 자동 추가
+	url = normalizeURL(url)
 	allTabs = append(allTabs, TabItem{
 		Name: name, URL: url, ColorBGR: color,
 	})
@@ -221,7 +236,7 @@ var AI_SITES = defaultTabs
 
 const (
 	APP_NAME      = "AI Browser"
-	APP_VERSION   = "1.0.0"
+	APP_VERSION   = "1.0.1"
 	APP_DEVELOPER = "혜통"
 	WINDOW_W      = 1400
 	WINDOW_H      = 900
