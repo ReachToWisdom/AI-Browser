@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Mutex, atomic::{AtomicBool, Ordering}};
+use std::sync::{Mutex, atomic::{AtomicBool, AtomicU64, Ordering}};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 use tauri::{
@@ -14,12 +14,14 @@ use tauri::{
 const TABBAR_H: f64 = 48.0;
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// 탭 설정
+// 탭 설정 (id 필드 추가, 기존 config 호환)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TabItem {
     pub name: String,
     pub url: String,
     pub color: String,
+    #[serde(default)]
+    pub id: String,
 }
 
 // 앱 상태
@@ -27,15 +29,21 @@ pub struct AppState {
     pub tabs: Mutex<Vec<TabItem>>,
     pub active_tab: Mutex<usize>,
     pub config_path: PathBuf,
+    pub overlay_open: AtomicBool,
+    pub next_id: AtomicU64,
+}
+
+fn gen_id(counter: &AtomicU64) -> String {
+    format!("tab-{}", counter.fetch_add(1, Ordering::SeqCst))
 }
 
 // 기본 탭
-fn default_tabs() -> Vec<TabItem> {
+fn default_tabs(counter: &AtomicU64) -> Vec<TabItem> {
     vec![
-        TabItem { name: "Claude".into(), url: "https://claude.ai".into(), color: "#D2A032".into() },
-        TabItem { name: "Gemini".into(), url: "https://gemini.google.com".into(), color: "#4285F4".into() },
-        TabItem { name: "ChatGPT".into(), url: "https://chatgpt.com".into(), color: "#10A37F".into() },
-        TabItem { name: "Grok".into(), url: "https://grok.com".into(), color: "#8C64FF".into() },
+        TabItem { name: "Claude".into(), url: "https://claude.ai".into(), color: "#D2A032".into(), id: gen_id(counter) },
+        TabItem { name: "Gemini".into(), url: "https://gemini.google.com".into(), color: "#4285F4".into(), id: gen_id(counter) },
+        TabItem { name: "ChatGPT".into(), url: "https://chatgpt.com".into(), color: "#10A37F".into(), id: gen_id(counter) },
+        TabItem { name: "Grok".into(), url: "https://grok.com".into(), color: "#8C64FF".into(), id: gen_id(counter) },
     ]
 }
 
@@ -43,18 +51,18 @@ fn default_tabs() -> Vec<TabItem> {
 #[tauri::command]
 fn get_presets() -> Vec<TabItem> {
     vec![
-        TabItem { name: "Claude".into(), url: "https://claude.ai".into(), color: "#D2A032".into() },
-        TabItem { name: "Gemini".into(), url: "https://gemini.google.com".into(), color: "#4285F4".into() },
-        TabItem { name: "ChatGPT".into(), url: "https://chatgpt.com".into(), color: "#10A37F".into() },
-        TabItem { name: "Grok".into(), url: "https://grok.com".into(), color: "#8C64FF".into() },
-        TabItem { name: "Perplexity".into(), url: "https://perplexity.ai".into(), color: "#20A8E8".into() },
-        TabItem { name: "Copilot".into(), url: "https://copilot.microsoft.com".into(), color: "#44B6E8".into() },
-        TabItem { name: "NotebookLM".into(), url: "https://notebooklm.google.com".into(), color: "#F5A242".into() },
-        TabItem { name: "AI Studio".into(), url: "https://aistudio.google.com".into(), color: "#4285F4".into() },
-        TabItem { name: "Poe".into(), url: "https://poe.com".into(), color: "#5599CC".into() },
-        TabItem { name: "HuggingChat".into(), url: "https://huggingface.co/chat".into(), color: "#FFD400".into() },
-        TabItem { name: "DeepSeek".into(), url: "https://chat.deepseek.com".into(), color: "#4B8CFF".into() },
-        TabItem { name: "Mistral".into(), url: "https://chat.mistral.ai".into(), color: "#FFAC2B".into() },
+        TabItem { name: "Claude".into(), url: "https://claude.ai".into(), color: "#D2A032".into(), id: String::new() },
+        TabItem { name: "Gemini".into(), url: "https://gemini.google.com".into(), color: "#4285F4".into(), id: String::new() },
+        TabItem { name: "ChatGPT".into(), url: "https://chatgpt.com".into(), color: "#10A37F".into(), id: String::new() },
+        TabItem { name: "Grok".into(), url: "https://grok.com".into(), color: "#8C64FF".into(), id: String::new() },
+        TabItem { name: "Perplexity".into(), url: "https://perplexity.ai".into(), color: "#20A8E8".into(), id: String::new() },
+        TabItem { name: "Copilot".into(), url: "https://copilot.microsoft.com".into(), color: "#44B6E8".into(), id: String::new() },
+        TabItem { name: "NotebookLM".into(), url: "https://notebooklm.google.com".into(), color: "#F5A242".into(), id: String::new() },
+        TabItem { name: "AI Studio".into(), url: "https://aistudio.google.com".into(), color: "#4285F4".into(), id: String::new() },
+        TabItem { name: "Poe".into(), url: "https://poe.com".into(), color: "#5599CC".into(), id: String::new() },
+        TabItem { name: "HuggingChat".into(), url: "https://huggingface.co/chat".into(), color: "#FFD400".into(), id: String::new() },
+        TabItem { name: "DeepSeek".into(), url: "https://chat.deepseek.com".into(), color: "#4B8CFF".into(), id: String::new() },
+        TabItem { name: "Mistral".into(), url: "https://chat.mistral.ai".into(), color: "#FFAC2B".into(), id: String::new() },
     ]
 }
 
@@ -65,15 +73,29 @@ fn get_config_path() -> PathBuf {
     dir.join("tabs.json")
 }
 
-fn load_tabs(path: &PathBuf) -> Vec<TabItem> {
+fn load_tabs(path: &PathBuf, counter: &AtomicU64) -> Vec<TabItem> {
     if let Ok(data) = fs::read_to_string(path) {
-        if let Ok(tabs) = serde_json::from_str::<Vec<TabItem>>(&data) {
+        if let Ok(mut tabs) = serde_json::from_str::<Vec<TabItem>>(&data) {
             if !tabs.is_empty() {
+                // 기존 config에 id가 없는 경우 자동 부여
+                for tab in &mut tabs {
+                    if tab.id.is_empty() {
+                        tab.id = gen_id(counter);
+                    }
+                }
+                // counter를 현재 최대값 이상으로 설정
+                let max_id = tabs.iter()
+                    .filter_map(|t| t.id.strip_prefix("tab-").and_then(|s| s.parse::<u64>().ok()))
+                    .max().unwrap_or(0);
+                let current = counter.load(Ordering::SeqCst);
+                if max_id >= current {
+                    counter.store(max_id + 1, Ordering::SeqCst);
+                }
                 return tabs;
             }
         }
     }
-    default_tabs()
+    default_tabs(counter)
 }
 
 fn save_tabs(path: &PathBuf, tabs: &[TabItem]) {
@@ -82,14 +104,24 @@ fn save_tabs(path: &PathBuf, tabs: &[TabItem]) {
     }
 }
 
-// 설정 패널 열기/닫기 시 메인 웹뷰 크기 조정
+// 활성 탭의 id 가져오기
+fn get_active_id(state: &AppState) -> Option<String> {
+    let active = *state.active_tab.lock().unwrap();
+    let tabs = state.tabs.lock().unwrap();
+    tabs.get(active).map(|t| t.id.clone())
+}
+
+// 모든 탭 id 목록 가져오기
+fn get_all_ids(state: &AppState) -> Vec<String> {
+    state.tabs.lock().unwrap().iter().map(|t| t.id.clone()).collect()
+}
+
+// 설정/모달 열기/닫기
 #[tauri::command]
 fn toggle_settings_view(app: tauri::AppHandle, state: State<AppState>, open: bool) {
-    let (tab_count, active) = {
-        let tabs = state.tabs.lock().unwrap();
-        let active = *state.active_tab.lock().unwrap();
-        (tabs.len(), active)
-    }; // 락 해제 후 UI 조작 (데드락 방지)
+    state.overlay_open.store(open, Ordering::SeqCst);
+    let active_id = get_active_id(&state);
+    let all_ids = get_all_ids(&state);
 
     if let Some(win) = app.get_window("main") {
         let size = win.inner_size().unwrap_or(tauri::PhysicalSize { width: 1400, height: 900 });
@@ -105,10 +137,9 @@ fn toggle_settings_view(app: tauri::AppHandle, state: State<AppState>, open: boo
             }
         }
 
-        for i in 0..tab_count {
-            let label = format!("tab-{}", i);
-            if let Some(wv) = app.get_webview(&label) {
-                if !open && i == active {
+        for id in &all_ids {
+            if let Some(wv) = app.get_webview(id) {
+                if !open && active_id.as_deref() == Some(id) {
                     wv.set_position(LogicalPosition::new(0.0, TABBAR_H)).ok();
                     wv.set_size(LogicalSize::new(w, h - TABBAR_H)).ok();
                 } else {
@@ -130,50 +161,47 @@ fn get_active_tab(state: State<AppState>) -> usize {
     *state.active_tab.lock().unwrap()
 }
 
-// 웹뷰 뒤로 가기
 #[tauri::command]
 fn go_back(app: tauri::AppHandle, state: State<AppState>) {
-    let active = *state.active_tab.lock().unwrap();
-    let label = format!("tab-{}", active);
-    if let Some(wv) = app.get_webview(&label) {
-        wv.eval("window.history.back()").ok();
+    if let Some(id) = get_active_id(&state) {
+        if let Some(wv) = app.get_webview(&id) {
+            wv.eval("window.history.back()").ok();
+        }
     }
 }
 
-// 웹뷰 앞으로 가기
 #[tauri::command]
 fn go_forward(app: tauri::AppHandle, state: State<AppState>) {
-    let active = *state.active_tab.lock().unwrap();
-    let label = format!("tab-{}", active);
-    if let Some(wv) = app.get_webview(&label) {
-        wv.eval("window.history.forward()").ok();
+    if let Some(id) = get_active_id(&state) {
+        if let Some(wv) = app.get_webview(&id) {
+            wv.eval("window.history.forward()").ok();
+        }
     }
 }
 
-// 현재 탭을 원래 URL로 이동
 #[tauri::command]
 fn go_home(app: tauri::AppHandle, state: State<AppState>) {
-    let (active, url) = {
+    let (id, url) = {
         let active = *state.active_tab.lock().unwrap();
         let tabs = state.tabs.lock().unwrap();
-        let url = tabs.get(active).map(|t| t.url.clone());
-        (active, url)
+        tabs.get(active).map(|t| (t.id.clone(), t.url.clone())).unwrap_or_default()
     };
-    if let Some(url) = url {
-        let label = format!("tab-{}", active);
-        if let Some(wv) = app.get_webview(&label) {
+    if !id.is_empty() {
+        if let Some(wv) = app.get_webview(&id) {
             wv.eval(&format!("window.location.href = '{}'", url)).ok();
         }
     }
 }
 
-// 탭 전환: 해당 webview를 보이고 나머지 숨김
+// 탭 전환
 #[tauri::command]
 fn switch_tab(app: tauri::AppHandle, state: State<AppState>, index: usize) {
-    let tab_count = {
+    let (target_id, all_ids) = {
         let tabs = state.tabs.lock().unwrap();
         if index >= tabs.len() { return; }
-        tabs.len()
+        let target = tabs[index].id.clone();
+        let all: Vec<String> = tabs.iter().map(|t| t.id.clone()).collect();
+        (target, all)
     };
     *state.active_tab.lock().unwrap() = index;
 
@@ -187,10 +215,9 @@ fn switch_tab(app: tauri::AppHandle, state: State<AppState>, index: usize) {
             main_wv.set_size(LogicalSize::new(w, TABBAR_H)).ok();
         }
 
-        for i in 0..tab_count {
-            let label = format!("tab-{}", i);
-            if let Some(wv) = app.get_webview(&label) {
-                if i == index {
+        for id in &all_ids {
+            if let Some(wv) = app.get_webview(id) {
+                if *id == target_id {
                     wv.set_position(LogicalPosition::new(0.0, TABBAR_H)).ok();
                     wv.set_size(LogicalSize::new(w, h - TABBAR_H)).ok();
                 } else {
@@ -202,22 +229,8 @@ fn switch_tab(app: tauri::AppHandle, state: State<AppState>, index: usize) {
     }
 }
 
-#[tauri::command]
-fn add_tab(app: tauri::AppHandle, state: State<AppState>, name: String, url: String, color: String) {
-    let (idx, url) = {
-        let mut tabs = state.tabs.lock().unwrap();
-        let url = if url.contains("://") { url } else { format!("https://{}", url) };
-        let idx = tabs.len();
-        tabs.push(TabItem { name, url: url.clone(), color });
-        save_tabs(&state.config_path, &tabs);
-        (idx, url)
-    }; // 락 해제 후 웹뷰 생성 (데드락 방지)
-
-    if let Some(win) = app.get_window("main") {
-        if let Ok(parsed) = url.parse() {
-            let label = format!("tab-{}", idx);
-            let same_tab_js = r#"
-(function() {
+fn same_tab_script() -> &'static str {
+    r#"(function() {
     window.open = function(url) {
         if (url && url !== '' && url !== 'about:blank' && !url.startsWith('javascript:')) {
             window.location.href = url;
@@ -230,27 +243,52 @@ fn add_tab(app: tauri::AppHandle, state: State<AppState>, name: String, url: Str
             e.preventDefault(); window.location.href = a.href;
         }
     }, true);
-})();"#;
-            let builder = WebviewBuilder::new(&label, tauri::WebviewUrl::External(parsed))
-                .initialization_script(same_tab_js);
+})();"#
+}
+
+#[tauri::command]
+fn add_tab(app: tauri::AppHandle, state: State<AppState>, name: String, url: String, color: String) {
+    let (id, url) = {
+        let mut tabs = state.tabs.lock().unwrap();
+        let url = if url.contains("://") { url } else { format!("https://{}", url) };
+        let id = gen_id(&state.next_id);
+        tabs.push(TabItem { name, url: url.clone(), color, id: id.clone() });
+        save_tabs(&state.config_path, &tabs);
+        (id, url)
+    };
+
+    if let Some(win) = app.get_window("main") {
+        if let Ok(parsed) = url.parse() {
+            let builder = WebviewBuilder::new(&id, tauri::WebviewUrl::External(parsed))
+                .initialization_script(same_tab_script());
             match win.add_child(builder, LogicalPosition::new(-10000.0, -10000.0), LogicalSize::new(0.0, 0.0)) {
-                Ok(_) => eprintln!("[add_tab] 웹뷰 {} 생성 성공", label),
-                Err(e) => eprintln!("[add_tab] 웹뷰 {} 생성 실패: {:?}", label, e),
+                Ok(_) => eprintln!("[add_tab] 웹뷰 {} 생성 성공", id),
+                Err(e) => eprintln!("[add_tab] 웹뷰 {} 생성 실패: {:?}", id, e),
             }
-        } else {
-            eprintln!("[add_tab] URL 파싱 실패: {}", url);
         }
-    } else {
-        eprintln!("[add_tab] main 윈도우 없음");
     }
 }
 
 #[tauri::command]
-fn remove_tab(state: State<AppState>, index: usize) -> bool {
-    let mut tabs = state.tabs.lock().unwrap();
-    if tabs.len() <= 1 || index >= tabs.len() { return false; }
-    tabs.remove(index);
-    save_tabs(&state.config_path, &tabs);
+fn remove_tab(app: tauri::AppHandle, state: State<AppState>, index: usize) -> bool {
+    let removed_id = {
+        let mut tabs = state.tabs.lock().unwrap();
+        if tabs.len() <= 1 || index >= tabs.len() { return false; }
+        let removed = tabs.remove(index);
+        save_tabs(&state.config_path, &tabs);
+        // active_tab 조정
+        let mut active = state.active_tab.lock().unwrap();
+        if *active >= tabs.len() {
+            *active = tabs.len() - 1;
+        }
+        removed.id
+    };
+
+    // 제거된 웹뷰 숨김 (Tauri 2 child webview는 destroy 불가)
+    if let Some(wv) = app.get_webview(&removed_id) {
+        wv.set_position(LogicalPosition::new(-10000.0, -10000.0)).ok();
+        wv.set_size(LogicalSize::new(0.0, 0.0)).ok();
+    }
     true
 }
 
@@ -268,7 +306,6 @@ fn get_version() -> String {
     APP_VERSION.to_string()
 }
 
-// 업데이트 확인: (버전, 릴리스페이지, 설치파일URL) 반환
 #[tauri::command]
 fn check_update() -> Option<(String, String, String)> {
     let resp = ureq::get("https://api.github.com/repos/ReachToWisdom/AI-Browser/releases/latest")
@@ -277,19 +314,15 @@ fn check_update() -> Option<(String, String, String)> {
     let json: serde_json::Value = resp.into_json().ok()?;
     let tag = json["tag_name"].as_str()?.trim_start_matches('v').to_string();
     let html_url = json["html_url"].as_str()?.to_string();
-
-    // 설치파일(setup.exe) 에셋 URL 찾기
     let asset_url = json["assets"].as_array()
         .and_then(|assets| assets.iter()
             .find(|a| a["name"].as_str().map_or(false, |n| n.contains("setup")))
             .and_then(|a| a["browser_download_url"].as_str().map(|s| s.to_string()))
         )
         .unwrap_or_else(|| html_url.clone());
-
     if is_newer(&tag, APP_VERSION) { Some((tag, html_url, asset_url)) } else { None }
 }
 
-// 설치파일 다운로드 후 실행
 #[tauri::command]
 fn download_and_install(app: tauri::AppHandle, download_url: String) -> Result<(), String> {
     let timestamp = std::time::SystemTime::now()
@@ -305,7 +338,6 @@ fn download_and_install(app: tauri::AppHandle, download_url: String) -> Result<(
     std::io::copy(&mut resp.into_reader(), &mut file).map_err(|e| format!("저장 실패: {}", e))?;
     drop(file);
 
-    // bat 스크립트: 2초 대기 후 인스톨러 실행 (파일 잠금 해제 대기)
     let script = format!(
         "@echo off\r\nping 127.0.0.1 -n 3 >nul\r\nstart \"\" \"{}\"\r\ndel \"%~f0\"\r\n",
         setup_path.to_string_lossy()
@@ -314,7 +346,7 @@ fn download_and_install(app: tauri::AppHandle, download_url: String) -> Result<(
 
     let mut cmd = std::process::Command::new(&bat_path);
     #[cfg(windows)]
-    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    cmd.creation_flags(0x08000000);
     cmd.spawn().map_err(|e| format!("실행 실패: {}", e))?;
 
     app.exit(0);
@@ -336,12 +368,15 @@ fn is_newer(latest: &str, current: &str) -> bool {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let config_path = get_config_path();
-    let tabs = load_tabs(&config_path);
-    let _tab_count = tabs.len();
+    let counter = AtomicU64::new(0);
+    let tabs = load_tabs(&config_path, &counter);
+    let initial_next_id = counter.load(Ordering::SeqCst);
+
+    // id가 새로 부여된 경우 저장
+    save_tabs(&config_path, &tabs);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // 중복 실행 시 기존 창 활성화
             if let Some(w) = app.get_window("main") {
                 w.show().ok();
                 w.set_focus().ok();
@@ -352,16 +387,15 @@ pub fn run() {
             tabs: Mutex::new(tabs.clone()),
             active_tab: Mutex::new(0),
             config_path,
+            overlay_open: AtomicBool::new(false),
+            next_id: AtomicU64::new(initial_next_id),
         })
         .setup(move |app| {
-            // 실제 종료 플래그
             let quitting = std::sync::Arc::new(AtomicBool::new(false));
             let quitting_tray = quitting.clone();
             let quitting_close = quitting.clone();
-            // 메인 윈도우 (탭바 UI용)
             let win = app.get_window("main").unwrap();
 
-            // 메인 webview(탭바)를 상단 48px로 제한
             if let Some(main_wv) = app.get_webview("main") {
                 main_wv.set_position(LogicalPosition::new(0.0, 0.0)).ok();
                 main_wv.set_size(LogicalSize::new(1400.0, TABBAR_H)).ok();
@@ -372,33 +406,11 @@ pub fn run() {
             let w = size.width as f64 / scale;
             let h = size.height as f64 / scale;
 
-            // 새 창 요청을 같은 탭에서 열기
-            let same_tab_script = r#"
-(function() {
-    // window.open 단순 오버라이드
-    window.open = function(url) {
-        if (url && url !== '' && url !== 'about:blank' && !url.startsWith('javascript:')) {
-            window.location.href = url;
-        }
-        return window;
-    };
-    // target="_blank" 클릭만 가로채기 (다른 이벤트는 건드리지 않음)
-    document.addEventListener('click', function(e) {
-        var a = e.target.closest('a[target="_blank"]');
-        if (a && a.href && a.href !== '#' && !a.href.startsWith('javascript:')) {
-            e.preventDefault();
-            window.location.href = a.href;
-        }
-    }, true);
-})();
-"#;
-
-            // 각 탭에 대해 webview 생성
+            // 각 탭에 대해 webview 생성 (id 기반 라벨)
             for (i, tab) in tabs.iter().enumerate() {
-                let label = format!("tab-{}", i);
                 let url: tauri::WebviewUrl = tauri::WebviewUrl::External(tab.url.parse().unwrap());
-                let builder = WebviewBuilder::new(&label, url)
-                    .initialization_script(same_tab_script);
+                let builder = WebviewBuilder::new(&tab.id, url)
+                    .initialization_script(same_tab_script());
 
                 if i == 0 {
                     win.add_child(builder, LogicalPosition::new(0.0, TABBAR_H), LogicalSize::new(w, h - TABBAR_H)).ok();
@@ -451,7 +463,7 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // 닫기 → 트레이 (종료 플래그가 아닌 경우만)
+            // 닫기 → 트레이
             let window = app.get_window("main").unwrap();
             let w2 = window.clone();
             window.on_window_event(move |event| {
@@ -469,15 +481,23 @@ pub fn run() {
             win2.on_window_event(move |event| {
                 if let tauri::WindowEvent::Resized(_) = event {
                     let state: State<AppState> = app_handle.state();
-                    // try_lock으로 데드락 방지 (다른 곳에서 락 잡고 있으면 스킵)
-                    let active = match state.active_tab.try_lock() {
-                        Ok(a) => *a,
-                        Err(_) => return,
-                    };
-                    let tab_count = match state.tabs.try_lock() {
-                        Ok(t) => t.len(),
-                        Err(_) => return,
-                    };
+
+                    // 오버레이 열림 상태면 메인 웹뷰 전체 유지
+                    if state.overlay_open.load(Ordering::SeqCst) {
+                        if let Some(win) = app_handle.get_window("main") {
+                            let size = win.inner_size().unwrap_or(tauri::PhysicalSize { width: 1400, height: 900 });
+                            let scale = win.scale_factor().unwrap_or(1.0);
+                            let w = size.width as f64 / scale;
+                            let h = size.height as f64 / scale;
+                            if let Some(main_wv) = app_handle.get_webview("main") {
+                                main_wv.set_size(LogicalSize::new(w, h)).ok();
+                            }
+                        }
+                        return;
+                    }
+
+                    let active_id = get_active_id(&state);
+                    let all_ids = get_all_ids(&state);
 
                     if let Some(win) = app_handle.get_window("main") {
                         let size = win.inner_size().unwrap_or(tauri::PhysicalSize { width: 1400, height: 900 });
@@ -489,10 +509,9 @@ pub fn run() {
                             main_wv.set_size(LogicalSize::new(w, TABBAR_H)).ok();
                         }
 
-                        for i in 0..tab_count {
-                            let label = format!("tab-{}", i);
-                            if let Some(wv) = app_handle.get_webview(&label) {
-                                if i == active {
+                        for id in &all_ids {
+                            if let Some(wv) = app_handle.get_webview(id) {
+                                if active_id.as_deref() == Some(id.as_str()) {
                                     wv.set_position(LogicalPosition::new(0.0, TABBAR_H)).ok();
                                     wv.set_size(LogicalSize::new(w, h - TABBAR_H)).ok();
                                 }
