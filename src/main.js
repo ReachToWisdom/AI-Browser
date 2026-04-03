@@ -181,7 +181,7 @@ async function showUpdateModal(version, htmlUrl, assetUrl) {
   overlay.innerHTML = `
     <div class="update-box">
       <h3>새 버전이 있습니다!</h3>
-      <p>현재: <b>v2.0.3</b></p>
+      <p>현재: <b>v2.0.4</b></p>
       <p>최신: <b>v${version}</b></p>
       <div class="update-btns">
         <button id="update-install">즉시 업그레이드</button>
