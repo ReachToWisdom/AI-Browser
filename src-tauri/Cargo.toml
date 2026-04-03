@@ -1,6 +1,6 @@
 [package]
 name = "ai-browser"
-version = "2.1.9"
+version = "2.2.0"
 description = "AI 사이트 모아보기 브라우저"
 authors = ["혜통"]
 edition = "2021"
