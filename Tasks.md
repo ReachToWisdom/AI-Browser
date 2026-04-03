@@ -1,24 +1,21 @@
-# AI Browser - 작업 목록
+# AI Browser v2 - Tasks
 
-## Phase 1: 프로젝트 초기화
-- [x] Go 모듈 초기화
-- [x] 의존성 설치 (go-webview2, x/sys/windows)
-- [x] 아이콘 생성 및 exe 임베딩
+## 완료된 작업
+- [x] Tauri v2 프로젝트 초기 설정
+- [x] 멀티 탭 WebView 구현
+- [x] 탭 전환/추가/삭제/순서변경
+- [x] AI 프리셋 12개 등록
+- [x] 시스템 트레이 (최소화/복원/종료)
+- [x] 중복 실행 방지 (single-instance)
+- [x] 자동 업데이트 알림 (GitHub Releases)
+- [x] same-tab 링크 오버라이드
+- [x] 윈도우 리사이즈 대응
+- [x] 설정 저장/불러오기 (tabs.json)
 
-## Phase 2: 핵심 구현
-- [x] WebView2 브라우저 창
-- [x] 네이티브 탭바 (GDI 렌더링)
-- [x] WebView2 bounds 조정 (탭바 아래 영역)
-- [x] 시스템 트레이 (Win32 API)
+## 미해결 이슈
+- [ ] 네이버 메일탭에서 메일 바로 읽기 안열림 (iframe/CSP 제한 추정)
 
-## Phase 3: 탭 관리
-- [x] 탭 클릭 → Navigate
-- [x] 탭 우클릭 → 삭제 메뉴 (실수 방지)
-- [x] ⚙ 설정 페이지 (프리셋 4개 AI + 커스텀 추가)
-- [x] tabs.json 저장/로드
-
-## Phase 4: 보호 기능
-- [x] X 버튼 → 트레이 숨기기 (종료 방지)
-- [x] 외부 링크 → 기본 브라우저에서 열기 (탭 덮어쓰기 방지)
-- [x] 중복실행 방지 (Mutex)
-- [x] 단독 exe 빌드 (-H windowsgui)
+## 향후 계획
+- [ ] 새로고침 기능 완성 (현재 미구현)
+- [ ] 키보드 단축키 (Ctrl+1~9 탭 전환)
+- [ ] 탭별 알림 배지
