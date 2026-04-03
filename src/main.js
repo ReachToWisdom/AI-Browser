@@ -11,7 +11,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   // 탭바 마우스 휠 가로 스크롤
   document.getElementById("tabbar").addEventListener("wheel", (e) => {
     e.preventDefault();
-    document.getElementById("tabbar").scrollLeft += e.deltaY;
+    const sa = document.getElementById("tab-scroll-area");
+    if (sa) sa.scrollLeft += e.deltaY;
   }, { passive: false });
   setTimeout(checkUpdate, 1000);
 });
@@ -22,6 +23,8 @@ function renderTabBar() {
   let html = '<button class="tab-btn" id="btn-back" title="뒤로">◀</button>';
   html += '<button class="tab-btn" id="btn-forward" title="앞으로">▶</button>';
   html += '<button class="tab-btn" id="btn-refresh" title="새로고침">↻</button>';
+  html += '<button class="tab-btn tab-scroll-btn" id="btn-scroll-left" title="탭 왼쪽">‹</button>';
+  html += '<div id="tab-scroll-area">';
   tabs.forEach((tab, i) => {
     const domain = new URL(tab.url).hostname;
     const favicon = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
@@ -31,6 +34,8 @@ function renderTabBar() {
       <span class="name">${tab.name}</span>
     </button>`;
   });
+  html += '</div>';
+  html += '<button class="tab-btn tab-scroll-btn" id="btn-scroll-right" title="탭 오른쪽">›</button>';
   html += '<button class="tab-btn" id="btn-settings" title="설정">⚙</button>';
   bar.innerHTML = html;
 
@@ -46,8 +51,17 @@ function renderTabBar() {
     });
   });
   // 활성 탭이 보이도록 자동 스크롤
-  const activeBtn = bar.querySelector(".tab.active");
+  const scrollArea = document.getElementById("tab-scroll-area");
+  const activeBtn = scrollArea.querySelector(".tab.active");
   if (activeBtn) activeBtn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+
+  // 탭 스크롤 버튼
+  document.getElementById("btn-scroll-left").addEventListener("click", () => {
+    scrollArea.scrollBy({ left: -150, behavior: "smooth" });
+  });
+  document.getElementById("btn-scroll-right").addEventListener("click", () => {
+    scrollArea.scrollBy({ left: 150, behavior: "smooth" });
+  });
 
   document.getElementById("btn-back").addEventListener("click", () => invoke("go_back"));
   document.getElementById("btn-forward").addEventListener("click", () => invoke("go_forward"));
