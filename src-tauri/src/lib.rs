@@ -312,8 +312,7 @@ fn download_and_install(app: tauri::AppHandle, download_url: String) -> Result<(
     );
     fs::write(&bat_path, &script).map_err(|e| format!("스크립트 생성 실패: {}", e))?;
 
-    let mut cmd = std::process::Command::new("cmd");
-    cmd.args(["/C", &bat_path.to_string_lossy().to_string()]);
+    let mut cmd = std::process::Command::new(&bat_path);
     #[cfg(windows)]
     cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     cmd.spawn().map_err(|e| format!("실행 실패: {}", e))?;
