@@ -79,6 +79,14 @@ func main() {
 	}
 
 	// Go 함수 바인딩 (설정 페이지에서 사용)
+	w.Bind("toggleIsolated", func(idx int) {
+		tabMutex.Lock()
+		if idx >= 0 && idx < len(allTabs) {
+			allTabs[idx].Isolated = !allTabs[idx].Isolated
+			saveTabs()
+		}
+		tabMutex.Unlock()
+	})
 	w.Bind("removeTab", func(idx int) {
 		if removeTabAt(idx) {
 			refreshTabBar()

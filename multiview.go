@@ -36,19 +36,25 @@ func ensureTabChromium(idx int) *edge.Chromium {
 
 	c := edge.NewChromium()
 
-	// 탭별 세션 격리: 도메인+경로 기반 독립 UserDataFolder
-	// 같은 도메인이라도 경로가 다르면 별도 폴더 (동일 호스트 다중 탭 충돌 방지)
+	// 세션 모드: 독립 세션이면 탭별 폴더, 아니면 공유 폴더
 	tabMutex.Lock()
 	tabURL := allTabs[idx].URL
+	isolated := allTabs[idx].Isolated
 	tabMutex.Unlock()
-	if parsed, err := url.Parse(tabURL); err == nil {
-		folderName := parsed.Hostname()
-		safePath := strings.ReplaceAll(strings.Trim(parsed.Path, "/"), "/", "_")
-		if safePath != "" {
-			folderName += "_" + safePath
+
+	if isolated {
+		// 독립 세션: 도메인+경로 기반 별도 UserDataFolder
+		if parsed, err := url.Parse(tabURL); err == nil {
+			folderName := parsed.Hostname()
+			safePath := strings.ReplaceAll(strings.Trim(parsed.Path, "/"), "/", "_")
+			if safePath != "" {
+				folderName += "_" + safePath
+			}
+			c.DataPath = filepath.Join(getAppDir(), "data", "isolated", folderName)
 		}
-		dataDir := filepath.Join(getAppDir(), "data", folderName)
-		c.DataPath = dataDir
+	} else {
+		// 공유 세션: 일반 브라우저와 동일
+		c.DataPath = filepath.Join(getAppDir(), "data", "shared")
 	}
 
 	c.SetPermission(edge.CoreWebView2PermissionKindClipboardRead, edge.CoreWebView2PermissionStateAllow)

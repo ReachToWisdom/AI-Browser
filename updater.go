@@ -105,15 +105,15 @@ func showUpdateDialog(newVersion, downloadURL string) {
 		APP_VERSION, newVersion)
 	title := APP_NAME + " 업데이트"
 
-	// MB_YESNO | MB_ICONINFORMATION
 	const MB_YESNO = 0x00000004
+	const MB_SYSTEMMODAL = 0x00001000 // 최상단 표시
 	const IDYES = 6
 
 	ret, _, _ := pMessageBoxW.Call(
-		0,
+		mainHWND,
 		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(msg))),
 		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(title))),
-		MB_YESNO|MB_ICONINFORMATION,
+		MB_YESNO|MB_ICONINFORMATION|MB_SYSTEMMODAL,
 	)
 
 	if ret == IDYES {
