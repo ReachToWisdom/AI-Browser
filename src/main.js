@@ -167,9 +167,28 @@ async function checkUpdate() {
     const result = await invoke("check_update");
     if (result) {
       const [version, url] = result;
-      if (confirm(`새 버전이 있습니다!\n\n현재: v2.0.1\n최신: v${version}\n\n다운로드 페이지를 열까요?`)) {
-        window.__TAURI__.opener.openUrl(url);
-      }
+      showUpdateModal(version, url);
     }
   } catch (e) {}
+}
+
+function showUpdateModal(version, url) {
+  const overlay = document.createElement("div");
+  overlay.id = "update-modal";
+  overlay.innerHTML = `
+    <div class="update-box">
+      <h3>🔔 새 버전이 있습니다!</h3>
+      <p>현재: <b>v2.0.1</b></p>
+      <p>최신: <b>v${version}</b></p>
+      <div class="update-btns">
+        <button id="update-yes">다운로드</button>
+        <button id="update-no">닫기</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById("update-yes").addEventListener("click", () => {
+    window.__TAURI__.opener.openUrl(url);
+    overlay.remove();
+  });
+  document.getElementById("update-no").addEventListener("click", () => overlay.remove());
 }

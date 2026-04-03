@@ -80,3 +80,24 @@ body { display: flex; flex-direction: column; background: #1e1e2e; }
 .btn-arrow:hover { background: #45475a; }
 .btn-arrow:disabled { opacity: 0.2; cursor: default; }
 .about { margin-top: 32px; padding-top: 16px; border-top: 1px solid #45475a; color: #a6adc8; font-size: 13px; text-align: center; }
+
+/* 업데이트 모달 */
+#update-modal {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 9999;
+}
+.update-box {
+  background: #313244; border-radius: 12px; padding: 28px 36px; color: #cdd6f4;
+  text-align: center; min-width: 300px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.update-box h3 { margin-bottom: 16px; font-size: 18px; color: #f9e2af; }
+.update-box p { margin: 6px 0; font-size: 14px; }
+.update-btns { display: flex; gap: 12px; justify-content: center; margin-top: 20px; }
+.update-btns button {
+  padding: 8px 24px; border: none; border-radius: 6px; cursor: pointer;
+  font-weight: 600; font-size: 14px;
+}
+#update-yes { background: #a6e3a1; color: #1e1e2e; }
+#update-yes:hover { background: #8cd68c; }
+#update-no { background: #45475a; color: #cdd6f4; }
+#update-no:hover { background: #585b70; }
