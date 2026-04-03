@@ -316,6 +316,11 @@ fn reorder_tab(state: State<AppState>, from: usize, to: usize) {
 }
 
 #[tauri::command]
+fn restart_app(app: tauri::AppHandle) {
+    app.restart();
+}
+
+#[tauri::command]
 fn get_version() -> String {
     APP_VERSION.to_string()
 }
@@ -541,7 +546,7 @@ pub fn run() {
             get_tabs, get_active_tab, switch_tab,
             add_tab, remove_tab, reorder_tab,
             get_presets, check_update, toggle_settings_view,
-            go_back, go_forward, go_home, download_and_install, get_version,
+            go_back, go_forward, go_home, download_and_install, get_version, restart_app,
         ])
         .run(tauri::generate_context!())
         .expect("AI Browser 실행 실패");

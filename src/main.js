@@ -104,15 +104,8 @@ async function renderSettings() {
   renderTabList();
 
   async function addAndSwitch(name, url, color) {
-    const newIdx = await invoke("add_tab", { name, url, color });
-    tabs = await invoke("get_tabs");
-    activeTab = newIdx;
-    // switch_tab이 웹뷰 생성+전환 처리 (toggle_settings보다 먼저)
-    await invoke("switch_tab", { index: activeTab });
-    settingsOpen = false;
-    document.getElementById("settings").classList.add("hidden");
-    await invoke("toggle_settings_view", { open: false });
-    renderTabBar();
+    await invoke("add_tab", { name, url, color });
+    await invoke("restart_app");
   }
 
   document.getElementById("preset-list").addEventListener("click", async (e) => {
