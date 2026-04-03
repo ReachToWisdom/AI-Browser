@@ -5,13 +5,12 @@ body { display: flex; flex-direction: column; background: #1e1e2e; }
 /* 탭바 */
 #tabbar {
   display: flex; align-items: center; height: 48px; min-height: 48px;
-  background: #1e1e2e; padding: 0 4px; user-select: none; -webkit-app-region: drag;
+  background: #1e1e2e; padding: 0 4px; user-select: none;
   overflow-x: auto; overflow-y: hidden;
 }
 #tabbar::-webkit-scrollbar { height: 3px; }
 #tabbar::-webkit-scrollbar-thumb { background: #45475a; border-radius: 3px; }
 #tabbar::-webkit-scrollbar-track { background: transparent; }
-#tabbar button { -webkit-app-region: no-drag; }
 .tab {
   display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 36px;
   border: none; border-radius: 8px 8px 0 0; cursor: pointer;
