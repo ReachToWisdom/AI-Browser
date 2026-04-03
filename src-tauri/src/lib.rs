@@ -285,13 +285,18 @@ fn check_update() -> Option<(String, String, String)> {
 // 설치파일 다운로드 후 실행
 #[tauri::command]
 fn download_and_install(app: tauri::AppHandle, download_url: String) -> Result<(), String> {
-    let temp = std::env::temp_dir().join("AI-Browser-setup.exe");
+    // 고유 파일명으로 충돌 방지
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+    let temp = std::env::temp_dir().join(format!("AI-Browser-setup-{}.exe", timestamp));
     let resp = ureq::get(&download_url)
         .set("User-Agent", "AI-Browser")
         .call()
         .map_err(|e| format!("다운로드 실패: {}", e))?;
     let mut file = fs::File::create(&temp).map_err(|e| format!("파일 생성 실패: {}", e))?;
     std::io::copy(&mut resp.into_reader(), &mut file).map_err(|e| format!("저장 실패: {}", e))?;
+    // 파일 핸들 닫기
+    drop(file);
 
     // 인스톨러 실행 후 앱 종료
     std::process::Command::new(&temp)
