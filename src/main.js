@@ -172,13 +172,16 @@ async function checkUpdate() {
   } catch (e) {}
 }
 
-function showUpdateModal(version, htmlUrl, assetUrl) {
+async function showUpdateModal(version, htmlUrl, assetUrl) {
+  // 메인 웹뷰를 전체 크기로 확장 (48px → 전체)
+  await invoke("toggle_settings_view", { open: true });
+
   const overlay = document.createElement("div");
   overlay.id = "update-modal";
   overlay.innerHTML = `
     <div class="update-box">
       <h3>새 버전이 있습니다!</h3>
-      <p>현재: <b>v2.0.2</b></p>
+      <p>현재: <b>v2.0.3</b></p>
       <p>최신: <b>v${version}</b></p>
       <div class="update-btns">
         <button id="update-install">즉시 업그레이드</button>
@@ -188,6 +191,12 @@ function showUpdateModal(version, htmlUrl, assetUrl) {
       <p id="update-status" style="display:none;margin-top:12px;font-size:12px;color:#a6e3a1"></p>
     </div>`;
   document.body.appendChild(overlay);
+
+  // 모달 닫기 공통 처리: 웹뷰 복원
+  async function closeModal() {
+    overlay.remove();
+    await invoke("toggle_settings_view", { open: false });
+  }
 
   // 즉시 업그레이드: 다운로드 후 설치
   document.getElementById("update-install").addEventListener("click", async () => {
@@ -208,10 +217,10 @@ function showUpdateModal(version, htmlUrl, assetUrl) {
   });
 
   // 다운로드 페이지 열기
-  document.getElementById("update-page").addEventListener("click", () => {
+  document.getElementById("update-page").addEventListener("click", async () => {
     window.__TAURI__.opener.openUrl(htmlUrl);
-    overlay.remove();
+    await closeModal();
   });
 
-  document.getElementById("update-no").addEventListener("click", () => overlay.remove());
+  document.getElementById("update-no").addEventListener("click", () => closeModal());
 }
