@@ -284,12 +284,17 @@ fn add_tab(app: tauri::AppHandle, state: State<AppState>, name: String, url: Str
             }
         }
 
-        // 새 웹뷰를 보이는 위치에 바로 생성
+        // 웹뷰 생성 후 핸들로 직접 위치 설정
         if let Ok(parsed) = url.parse() {
             let builder = WebviewBuilder::new(&id, tauri::WebviewUrl::External(parsed))
                 .initialization_script(same_tab_script());
             match win.add_child(builder, LogicalPosition::new(0.0, TABBAR_H), LogicalSize::new(w, h - TABBAR_H)) {
-                Ok(_) => {},
+                Ok(wv) => {
+                    wv.set_position(LogicalPosition::new(0.0, TABBAR_H)).ok();
+                    wv.set_size(LogicalSize::new(w, h - TABBAR_H)).ok();
+                    // URL을 명시적으로 로딩
+                    let _ = wv.eval(&format!("window.location.href = '{}'", url));
+                },
                 Err(e) => return Err(format!("웹뷰 생성 실패: {:?}", e)),
             }
         } else {

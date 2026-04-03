@@ -111,6 +111,10 @@ async function renderSettings() {
       settingsOpen = false;
       document.getElementById("settings").classList.add("hidden");
       renderTabBar();
+      // 웹뷰 초기화 대기 후 재배치
+      setTimeout(async () => {
+        await invoke("switch_tab", { index: activeTab });
+      }, 200);
     } catch (e) {
       alert("탭 추가 실패: " + e);
     }
