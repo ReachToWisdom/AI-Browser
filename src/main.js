@@ -8,6 +8,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   tabs = await invoke("get_tabs");
   activeTab = await invoke("get_active_tab");
   renderTabBar();
+  // 탭바 마우스 휠 가로 스크롤
+  document.getElementById("tabbar").addEventListener("wheel", (e) => {
+    e.preventDefault();
+    document.getElementById("tabbar").scrollLeft += e.deltaY;
+  }, { passive: false });
   setTimeout(checkUpdate, 1000);
 });
 
@@ -40,6 +45,10 @@ function renderTabBar() {
       }
     });
   });
+  // 활성 탭이 보이도록 자동 스크롤
+  const activeBtn = bar.querySelector(".tab.active");
+  if (activeBtn) activeBtn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+
   document.getElementById("btn-back").addEventListener("click", () => invoke("go_back"));
   document.getElementById("btn-forward").addEventListener("click", () => invoke("go_forward"));
   document.getElementById("btn-refresh").addEventListener("click", refreshCurrentTab);

@@ -63,6 +63,7 @@ fn get_presets() -> Vec<TabItem> {
         TabItem { name: "HuggingChat".into(), url: "https://huggingface.co/chat".into(), color: "#FFD400".into(), id: String::new() },
         TabItem { name: "DeepSeek".into(), url: "https://chat.deepseek.com".into(), color: "#4B8CFF".into(), id: String::new() },
         TabItem { name: "Mistral".into(), url: "https://chat.mistral.ai".into(), color: "#FFAC2B".into(), id: String::new() },
+        TabItem { name: "Genspark".into(), url: "https://www.genspark.ai".into(), color: "#6C5CE7".into(), id: String::new() },
     ]
 }
 
