@@ -112,7 +112,7 @@ async function renderSettings() {
     renderTabBar();
   });
 
-  document.getElementById("btn-do-add").addEventListener("click", async () => {
+  async function doAddTab() {
     const name = document.getElementById("add-name").value.trim();
     const url = document.getElementById("add-url").value.trim();
     if (!name || !url) { alert("이름과 URL을 입력하세요"); return; }
@@ -120,6 +120,15 @@ async function renderSettings() {
     tabs = await invoke("get_tabs");
     renderSettings();
     renderTabBar();
+  }
+
+  document.getElementById("btn-do-add").addEventListener("click", doAddTab);
+  // 엔터키로 추가
+  document.getElementById("add-url").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") doAddTab();
+  });
+  document.getElementById("add-name").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") document.getElementById("add-url").focus();
   });
 
   document.getElementById("btn-back").addEventListener("click", toggleSettings);
@@ -160,7 +169,7 @@ function renderTabList() {
   });
 }
 
-async function getVersion() { return "2.0.2"; }
+async function getVersion() { return await invoke("get_version"); }
 
 async function checkUpdate() {
   try {
@@ -175,13 +184,14 @@ async function checkUpdate() {
 async function showUpdateModal(version, htmlUrl, assetUrl) {
   // 메인 웹뷰를 전체 크기로 확장 (48px → 전체)
   await invoke("toggle_settings_view", { open: true });
+  const currentVer = await getVersion();
 
   const overlay = document.createElement("div");
   overlay.id = "update-modal";
   overlay.innerHTML = `
     <div class="update-box">
       <h3>새 버전이 있습니다!</h3>
-      <p>현재: <b>v2.0.7</b></p>
+      <p>현재: <b>v${currentVer}</b></p>
       <p>최신: <b>v${version}</b></p>
       <div class="update-btns">
         <button id="update-install">즉시 업그레이드</button>

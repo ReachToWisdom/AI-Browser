@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Mutex, atomic::{AtomicBool, Ordering}};
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::TrayIconBuilder,
@@ -261,6 +263,11 @@ fn reorder_tab(state: State<AppState>, from: usize, to: usize) {
     save_tabs(&state.config_path, &tabs);
 }
 
+#[tauri::command]
+fn get_version() -> String {
+    APP_VERSION.to_string()
+}
+
 // 업데이트 확인: (버전, 릴리스페이지, 설치파일URL) 반환
 #[tauri::command]
 fn check_update() -> Option<(String, String, String)> {
@@ -305,10 +312,11 @@ fn download_and_install(app: tauri::AppHandle, download_url: String) -> Result<(
     );
     fs::write(&bat_path, &script).map_err(|e| format!("스크립트 생성 실패: {}", e))?;
 
-    std::process::Command::new("cmd")
-        .args(["/C", "start", "", &bat_path.to_string_lossy()])
-        .spawn()
-        .map_err(|e| format!("실행 실패: {}", e))?;
+    let mut cmd = std::process::Command::new("cmd");
+    cmd.args(["/C", &bat_path.to_string_lossy().to_string()]);
+    #[cfg(windows)]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    cmd.spawn().map_err(|e| format!("실행 실패: {}", e))?;
 
     app.exit(0);
     Ok(())
@@ -497,7 +505,7 @@ pub fn run() {
             get_tabs, get_active_tab, switch_tab,
             add_tab, remove_tab, reorder_tab,
             get_presets, check_update, toggle_settings_view,
-            go_back, go_forward, go_home, download_and_install,
+            go_back, go_forward, go_home, download_and_install, get_version,
         ])
         .run(tauri::generate_context!())
         .expect("AI Browser 실행 실패");
