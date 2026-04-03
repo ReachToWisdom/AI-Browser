@@ -108,7 +108,12 @@ async function renderSettings() {
     if (!btn) return;
     await invoke("add_tab", { name: btn.dataset.name, url: btn.dataset.url, color: btn.dataset.color });
     tabs = await invoke("get_tabs");
-    renderSettings();
+    // 추가한 탭으로 자동 전환
+    activeTab = tabs.length - 1;
+    await invoke("switch_tab", { index: activeTab });
+    settingsOpen = false;
+    document.getElementById("settings").classList.add("hidden");
+    await invoke("toggle_settings_view", { open: false });
     renderTabBar();
   });
 
@@ -118,17 +123,22 @@ async function renderSettings() {
     if (!name || !url) { alert("이름과 URL을 입력하세요"); return; }
     await invoke("add_tab", { name, url, color: "#888888" });
     tabs = await invoke("get_tabs");
-    renderSettings();
+    // 추가한 탭으로 자동 전환
+    activeTab = tabs.length - 1;
+    await invoke("switch_tab", { index: activeTab });
+    settingsOpen = false;
+    document.getElementById("settings").classList.add("hidden");
+    await invoke("toggle_settings_view", { open: false });
     renderTabBar();
   }
 
   document.getElementById("btn-do-add").addEventListener("click", doAddTab);
   // 엔터키로 추가
   document.getElementById("add-url").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") doAddTab();
+    if (e.key === "Enter") { e.preventDefault(); doAddTab(); }
   });
   document.getElementById("add-name").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") document.getElementById("add-url").focus();
+    if (e.key === "Enter") { e.preventDefault(); document.getElementById("add-url").focus(); }
   });
 
   document.getElementById("btn-back").addEventListener("click", toggleSettings);

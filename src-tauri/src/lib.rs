@@ -433,7 +433,11 @@ pub fn run() {
                         }
                         "quit" => {
                             quitting_tray.store(true, Ordering::SeqCst);
+                            if let Some(w) = app.get_window("main") {
+                                w.destroy().ok();
+                            }
                             app.exit(0);
+                            std::process::exit(0);
                         }
                         _ => {}
                     }

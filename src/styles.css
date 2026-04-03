@@ -6,13 +6,17 @@ body { display: flex; flex-direction: column; background: #1e1e2e; }
 #tabbar {
   display: flex; align-items: center; height: 48px; min-height: 48px;
   background: #1e1e2e; padding: 0 4px; user-select: none; -webkit-app-region: drag;
+  overflow-x: auto; overflow-y: hidden;
 }
+#tabbar::-webkit-scrollbar { height: 3px; }
+#tabbar::-webkit-scrollbar-thumb { background: #45475a; border-radius: 3px; }
+#tabbar::-webkit-scrollbar-track { background: transparent; }
 #tabbar button { -webkit-app-region: no-drag; }
 .tab {
-  display: flex; align-items: center; gap: 6px; padding: 0 14px; height: 36px;
+  display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 36px;
   border: none; border-radius: 8px 8px 0 0; cursor: pointer;
   font-size: 13px; font-weight: 500; color: #a6adc8; background: transparent;
-  transition: background 0.15s;
+  transition: background 0.15s; flex-shrink: 0;
 }
 .tab:hover { background: #313244; }
 .tab.active { background: #45475a; color: #a6e3a1; }
@@ -23,7 +27,7 @@ body { display: flex; flex-direction: column; background: #1e1e2e; }
 .tab-btn {
   width: 36px; height: 36px; border: none; border-radius: 6px; cursor: pointer;
   background: transparent; color: #a6adc8; font-size: 18px; display: flex;
-  align-items: center; justify-content: center;
+  align-items: center; justify-content: center; flex-shrink: 0;
 }
 .tab-btn:hover { background: #313244; }
 
