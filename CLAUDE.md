@@ -2,6 +2,9 @@
 
 AI 모아 놓은 브라우저로, 종료시 트레이로 가고, 실제 종료 메뉴를 통해서 종료할것
 
+## 버전
+- 현재: v2.0.1
+
 ## 기술 스택
 - Go + WebView2 (Windows)
 - 빌드: `go build -ldflags "-H windowsgui" -o AI_Browser.exe .`

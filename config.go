@@ -236,7 +236,7 @@ var AI_SITES = defaultTabs
 
 const (
 	APP_NAME      = "AI Browser"
-	APP_VERSION   = "1.2.0"
+	APP_VERSION   = "2.0.1"
 	APP_DEVELOPER = "혜통"
 	WINDOW_W      = 1400
 	WINDOW_H      = 900
