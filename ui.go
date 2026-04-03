@@ -31,11 +31,6 @@ background:#313244;border-radius:8px;margin-bottom:6px}
 .btn-del{background:#f38ba8;color:#1e1e2e;border:none;border-radius:4px;
 padding:3px 10px;cursor:pointer;font-size:12px;font-weight:600}
 .btn-del:hover{background:#eba0ac}
-.btn-iso{border:1px solid #45475a;color:#6c7086;background:none;border-radius:4px;
-padding:3px 8px;cursor:pointer;font-size:11px}
-.btn-iso.on{background:#cba6f7;color:#1e1e2e;border-color:#cba6f7}
-.btn-iso:hover{border-color:#cba6f7}
-.iso-badge{font-size:10px;color:#cba6f7;margin-left:4px}
 .btn-add{background:#a6e3a1;color:#1e1e2e;border:none;border-radius:4px;
 padding:3px 10px;cursor:pointer;font-size:12px;font-weight:600}
 .btn-add:hover{background:#94e2d5}
@@ -107,25 +102,17 @@ function moveTab(from,to){
 function renderTabs(){
   var h='';
   tabs.forEach(function(t,i){
-    var iso=t.isolated?true:false;
-    h+='<div class="item"'+( iso?' style="border-left:3px solid #cba6f7"':'')+' >'
+    h+='<div class="item">'
       +'<span class="order-num">'+(i+1)+'</span>'
       +'<button class="btn-arrow" onclick="moveTab('+i+','+(i-1)+')"'+(i===0?' disabled':'')+'>▲</button>'
       +'<button class="btn-arrow" onclick="moveTab('+i+','+(i+1)+')"'+(i===tabs.length-1?' disabled':'')+'>▼</button>'
       +'<div class="dot" style="background:'+bgrToHex(t.color)+'"></div>'
-      +'<span class="name">'+t.name+(iso?'<span class="iso-badge">독립</span>':'')+'</span>'
+      +'<span class="name">'+t.name+'</span>'
       +'<span class="url">'+t.url+'</span>'
-      +'<button class="btn-iso'+(iso?' on':'')+'" onclick="toggleIso('+i+')">'+(iso?'독립':'공유')+'</button>'
       +(tabs.length>1?'<button class="btn-del" onclick="doRemove('+i+')">삭제</button>':'')
       +'</div>';
   });
   document.getElementById('tabs').innerHTML=h;
-}
-function toggleIso(i){
-  toggleIsolated(i).then(function(){
-    tabs[i].isolated=!tabs[i].isolated;
-    renderTabs();
-  });
 }
 function addPreset(n,u,c){
   addNewTab(n,u,c).then(function(){

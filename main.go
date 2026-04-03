@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"path/filepath"
 	"runtime"
 	"syscall"
 	"time"
@@ -31,12 +33,20 @@ var webviewInstance webview2.WebView
 func main() {
 	runtime.LockOSThread()
 
+	// 디버그 로그 파일 설정
+	logFile, err := os.OpenFile(filepath.Join(getAppDir(), "crash.log"),
+		os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err == nil {
+		log.SetOutput(logFile)
+		defer logFile.Close()
+	}
+
 	// AppUserModelID 설정 (작업표시줄 아이콘이 Electron/Edge로 바뀌는 문제 방지)
 	setAppUserModelID("HyeTong.AIBrowser")
 
 	// 단일 인스턴스 보장 (Mutex)
 	mutexName := syscall.StringToUTF16Ptr("Global\\AIBrowserMutex")
-	_, _, err := pCreateMutexW.Call(0, 0, uintptr(unsafe.Pointer(mutexName)))
+	_, _, err = pCreateMutexW.Call(0, 0, uintptr(unsafe.Pointer(mutexName)))
 	if err == syscall.Errno(ERROR_ALREADY_EXISTS) {
 		bringExistingWindow()
 		os.Exit(0)
@@ -79,14 +89,6 @@ func main() {
 	}
 
 	// Go 함수 바인딩 (설정 페이지에서 사용)
-	w.Bind("toggleIsolated", func(idx int) {
-		tabMutex.Lock()
-		if idx >= 0 && idx < len(allTabs) {
-			allTabs[idx].Isolated = !allTabs[idx].Isolated
-			saveTabs()
-		}
-		tabMutex.Unlock()
-	})
 	w.Bind("removeTab", func(idx int) {
 		if removeTabAt(idx) {
 			refreshTabBar()
@@ -138,20 +140,9 @@ func main() {
 				c.Focus()
 			}
 
-			// 워밍업: 나머지 탭 백그라운드 사전 생성 → 완료 후 캐시 정리
+			// 캐시 정리 (백그라운드)
 			go func() {
-				for i := 0; i < len(allTabs); i++ {
-					if i == activeTab {
-						continue
-					}
-					idx := i
-					time.Sleep(500 * time.Millisecond)
-					w.Dispatch(func() {
-						ensureTabChromium(idx)
-					})
-				}
-				// 모든 탭 준비 완료 후 캐시 정리 (UI 블로킹 없음)
-				time.Sleep(3 * time.Second)
+				time.Sleep(5 * time.Second)
 				runCleanup()
 			}()
 

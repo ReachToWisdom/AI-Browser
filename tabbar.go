@@ -209,14 +209,6 @@ func paintTabBar(hwnd syscall.Handle) {
 			pSetTextColor.Call(hdc, 0x00C8ADA6)
 		}
 
-		// 독립 세션 표시 (하단 보라색 줄)
-		if tab.Isolated {
-			isoBrush, _, _ := pCreateSolidBrush.Call(0x00F7A6CB) // 보라색 (BGR)
-			isoR := RECT{int32(x), int32(TABBAR_H - 3), int32(x + tabW), int32(TABBAR_H)}
-			pFillRect.Call(hdc, uintptr(unsafe.Pointer(&isoR)), isoBrush)
-			pDeleteObject.Call(isoBrush)
-		}
-
 		// 색상 원 (10px)
 		dotBrush, _, _ := pCreateSolidBrush.Call(uintptr(tab.ColorBGR))
 		old, _, _ := pSelectObject.Call(hdc, dotBrush)

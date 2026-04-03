@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -36,26 +35,8 @@ func ensureTabChromium(idx int) *edge.Chromium {
 
 	c := edge.NewChromium()
 
-	// 세션 모드: 독립 세션이면 탭별 폴더, 아니면 공유 폴더
-	tabMutex.Lock()
-	tabURL := allTabs[idx].URL
-	isolated := allTabs[idx].Isolated
-	tabMutex.Unlock()
-
-	if isolated {
-		// 독립 세션: 도메인+경로 기반 별도 UserDataFolder
-		if parsed, err := url.Parse(tabURL); err == nil {
-			folderName := parsed.Hostname()
-			safePath := strings.ReplaceAll(strings.Trim(parsed.Path, "/"), "/", "_")
-			if safePath != "" {
-				folderName += "_" + safePath
-			}
-			c.DataPath = filepath.Join(getAppDir(), "data", "isolated", folderName)
-		}
-	} else {
-		// 공유 세션: 일반 브라우저와 동일
-		c.DataPath = filepath.Join(getAppDir(), "data", "shared")
-	}
+	// 공유 세션: 모든 탭이 동일 세션 (속도 최우선)
+	c.DataPath = filepath.Join(getAppDir(), "data", "shared")
 
 	c.SetPermission(edge.CoreWebView2PermissionKindClipboardRead, edge.CoreWebView2PermissionStateAllow)
 
@@ -111,15 +92,16 @@ func switchToTab(newIdx int) {
 	}
 	tabMutex.Unlock()
 
-	// 같은 탭 클릭 → 홈 URL로 복귀 (로그인 페이지 탈출용)
+	// 같은 탭 클릭 → Chromium이 이미 있으면 홈 URL로 복귀, 없으면 새로 생성
 	if newIdx == activeTab && !onSettingsPage {
-		if c := tabChromiums[newIdx]; c != nil {
+		if newIdx < len(tabChromiums) && tabChromiums[newIdx] != nil {
 			tabMutex.Lock()
 			homeURL := allTabs[newIdx].URL
 			tabMutex.Unlock()
-			c.Navigate(homeURL)
+			tabChromiums[newIdx].Navigate(homeURL)
+			return
 		}
-		return
+		// Chromium 미생성 → 아래 로직으로 진행하여 생성
 	}
 
 	// 새 탭 먼저 준비 → Show → 이전 탭 Hide (깜박임 방지)

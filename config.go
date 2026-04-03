@@ -26,7 +26,6 @@ type TabItem struct {
 	URL        string `json:"url"`
 	ColorBGR   uint32 `json:"color"`                // 탭 색상 (BGR)
 	CurrentURL string `json:"currentUrl,omitempty"` // 마지막 방문 URL (앱 재시작 시 복원)
-	Isolated   bool   `json:"isolated,omitempty"`   // 독립 세션 (true: 탭별 별도 세션)
 }
 
 // 설정 페이지 표시 중 여부
@@ -237,7 +236,7 @@ var AI_SITES = defaultTabs
 
 const (
 	APP_NAME      = "AI Browser"
-	APP_VERSION   = "1.1.1"
+	APP_VERSION   = "1.2.0"
 	APP_DEVELOPER = "혜통"
 	WINDOW_W      = 1400
 	WINDOW_H      = 900

@@ -117,8 +117,7 @@ func hookTabEvents(c *edge.Chromium) {
 
 	var token int64
 
-	// 1) NewWindowRequested → 현재 탭 내부에서 네비게이션 (OAuth 등 팝업 지원)
-	chromium := c
+	// 1) NewWindowRequested → 시스템 기본 브라우저로 열기 (팝업/메일/쪽지 등)
 	nwHandler := newComHandler(func(sender, args uintptr) uintptr {
 		var uriPtr *uint16
 		syscall.SyscallN(comFn(args, nwArgsGetUri),
@@ -126,17 +125,11 @@ func hookTabEvents(c *edge.Chromium) {
 		if uriPtr != nil {
 			popupURL := utf16PtrToString(uriPtr)
 			pCoTaskMemFree.Call(uintptr(unsafe.Pointer(uriPtr)))
-			if popupURL != "" {
-				// UI 스레드에서 네비게이션 실행 (COM 콜백 내부에서 직접 호출 시 무시될 수 있음)
-				url := popupURL
-				if webviewInstance != nil {
-					webviewInstance.Dispatch(func() {
-						chromium.Navigate(url)
-					})
-				}
+			if popupURL != "" && popupURL != "about:blank" {
+				openURLInBrowser(popupURL)
 			}
 		}
-		// PutHandled(true) → 별도 팝업 창 열지 않음
+		// PutHandled(true) → WebView2 내부에서 새 창 열지 않음
 		syscall.SyscallN(comFn(args, nwArgsPutHandled), args, 1)
 		return 0
 	})
