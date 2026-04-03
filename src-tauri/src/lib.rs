@@ -246,63 +246,29 @@ fn same_tab_script() -> &'static str {
 })();"#
 }
 
+// 탭 추가 (웹뷰 생성만 담당, 화면 전환은 JS에서)
 #[tauri::command]
-fn add_tab(app: tauri::AppHandle, state: State<AppState>, name: String, url: String, color: String) -> Result<usize, String> {
-    let (id, url, new_idx, all_ids) = {
+fn add_tab(app: tauri::AppHandle, state: State<AppState>, name: String, url: String, color: String) -> usize {
+    let (id, url, new_idx) = {
         let mut tabs = state.tabs.lock().unwrap();
         let url = if url.contains("://") { url } else { format!("https://{}", url) };
         let id = gen_id(&state.next_id);
+        let new_idx = tabs.len();
         tabs.push(TabItem { name, url: url.clone(), color, id: id.clone() });
         save_tabs(&state.config_path, &tabs);
-        let new_idx = tabs.len() - 1;
-        let all_ids: Vec<String> = tabs.iter().map(|t| t.id.clone()).collect();
-        (id, url, new_idx, all_ids)
+        (id, url, new_idx)
     };
 
-    // active_tab 업데이트
-    *state.active_tab.lock().unwrap() = new_idx;
-    state.overlay_open.store(false, Ordering::SeqCst);
-
     if let Some(win) = app.get_window("main") {
-        let size = win.inner_size().unwrap_or(tauri::PhysicalSize { width: 1400, height: 900 });
-        let scale = win.scale_factor().unwrap_or(1.0);
-        let w = size.width as f64 / scale;
-        let h = size.height as f64 / scale;
-
-        // 메인 웹뷰를 탭바 크기로
-        if let Some(main_wv) = app.get_webview("main") {
-            main_wv.set_size(LogicalSize::new(w, TABBAR_H)).ok();
-        }
-
-        // 기존 탭 웹뷰 모두 숨김
-        for other_id in &all_ids {
-            if *other_id != id {
-                if let Some(wv) = app.get_webview(other_id) {
-                    wv.set_position(LogicalPosition::new(-10000.0, -10000.0)).ok();
-                    wv.set_size(LogicalSize::new(0.0, 0.0)).ok();
-                }
-            }
-        }
-
-        // 웹뷰 생성 후 핸들로 직접 위치 설정
         if let Ok(parsed) = url.parse() {
             let builder = WebviewBuilder::new(&id, tauri::WebviewUrl::External(parsed))
                 .initialization_script(same_tab_script());
-            match win.add_child(builder, LogicalPosition::new(0.0, TABBAR_H), LogicalSize::new(w, h - TABBAR_H)) {
-                Ok(wv) => {
-                    wv.set_position(LogicalPosition::new(0.0, TABBAR_H)).ok();
-                    wv.set_size(LogicalSize::new(w, h - TABBAR_H)).ok();
-                    // URL을 명시적으로 로딩
-                    let _ = wv.eval(&format!("window.location.href = '{}'", url));
-                },
-                Err(e) => return Err(format!("웹뷰 생성 실패: {:?}", e)),
-            }
-        } else {
-            return Err(format!("URL 파싱 실패: {}", url));
+            // 숨겨진 위치에 생성 (switch_tab에서 표시)
+            win.add_child(builder, LogicalPosition::new(-10000.0, -10000.0), LogicalSize::new(1.0, 1.0)).ok();
         }
     }
 
-    Ok(new_idx)
+    new_idx
 }
 
 #[tauri::command]

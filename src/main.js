@@ -104,20 +104,18 @@ async function renderSettings() {
   renderTabList();
 
   async function addAndSwitch(name, url, color) {
-    try {
-      const newIdx = await invoke("add_tab", { name, url, color });
-      tabs = await invoke("get_tabs");
-      activeTab = newIdx;
-      settingsOpen = false;
-      document.getElementById("settings").classList.add("hidden");
-      renderTabBar();
-      // 웹뷰 초기화 대기 후 재배치
-      setTimeout(async () => {
-        await invoke("switch_tab", { index: activeTab });
-      }, 200);
-    } catch (e) {
-      alert("탭 추가 실패: " + e);
-    }
+    const newIdx = await invoke("add_tab", { name, url, color });
+    tabs = await invoke("get_tabs");
+    activeTab = newIdx;
+    // 1. 설정 닫기
+    settingsOpen = false;
+    document.getElementById("settings").classList.add("hidden");
+    await invoke("toggle_settings_view", { open: false });
+    renderTabBar();
+    // 2. 웹뷰 초기화 대기 후 전환
+    setTimeout(async () => {
+      await invoke("switch_tab", { index: activeTab });
+    }, 300);
   }
 
   document.getElementById("preset-list").addEventListener("click", async (e) => {
