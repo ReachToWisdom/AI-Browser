@@ -1,0 +1,43 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      # winres 리소스 생성
+      - name: Install go-winres
+        run: go install github.com/tc-hib/go-winres@latest
+
+      - name: Generate Windows resources
+        run: go-winres make
+
+      # 빌드 (GUI 모드, 콘솔 창 없음)
+      - name: Build
+        run: go build -ldflags "-H windowsgui -s -w" -o AI_Browser.exe .
+
+      # ZIP 패키징
+      - name: Package
+        run: Compress-Archive -Path AI_Browser.exe -DestinationPath AI_Browser_${{ github.ref_name }}.zip
+
+      # GitHub Releases에 업로드
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            AI_Browser.exe
+            AI_Browser_${{ github.ref_name }}.zip
+          generate_release_notes: true

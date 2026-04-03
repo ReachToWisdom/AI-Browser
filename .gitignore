@@ -1,0 +1,9 @@
+*.exe
+*.zip
+*.syso
+.claude-log
+state.json
+tabs.json
+uploads/
+data/
+setting/
