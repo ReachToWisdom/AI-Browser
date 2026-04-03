@@ -97,7 +97,10 @@ body { display: flex; flex-direction: column; background: #1e1e2e; }
   padding: 8px 24px; border: none; border-radius: 6px; cursor: pointer;
   font-weight: 600; font-size: 14px;
 }
-#update-yes { background: #a6e3a1; color: #1e1e2e; }
-#update-yes:hover { background: #8cd68c; }
+#update-install { background: #a6e3a1; color: #1e1e2e; }
+#update-install:hover { background: #8cd68c; }
+#update-install:disabled { background: #45475a; color: #a6adc8; cursor: wait; }
+#update-page { background: #89b4fa; color: #1e1e2e; }
+#update-page:hover { background: #74a8f7; }
 #update-no { background: #45475a; color: #cdd6f4; }
 #update-no:hover { background: #585b70; }

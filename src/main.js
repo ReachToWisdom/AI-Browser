@@ -160,35 +160,58 @@ function renderTabList() {
   });
 }
 
-async function getVersion() { return "2.0.1"; }
+async function getVersion() { return "2.0.2"; }
 
 async function checkUpdate() {
   try {
     const result = await invoke("check_update");
     if (result) {
-      const [version, url] = result;
-      showUpdateModal(version, url);
+      const [version, htmlUrl, assetUrl] = result;
+      showUpdateModal(version, htmlUrl, assetUrl);
     }
   } catch (e) {}
 }
 
-function showUpdateModal(version, url) {
+function showUpdateModal(version, htmlUrl, assetUrl) {
   const overlay = document.createElement("div");
   overlay.id = "update-modal";
   overlay.innerHTML = `
     <div class="update-box">
-      <h3>🔔 새 버전이 있습니다!</h3>
-      <p>현재: <b>v2.0.1</b></p>
+      <h3>새 버전이 있습니다!</h3>
+      <p>현재: <b>v2.0.2</b></p>
       <p>최신: <b>v${version}</b></p>
       <div class="update-btns">
-        <button id="update-yes">다운로드</button>
+        <button id="update-install">즉시 업그레이드</button>
+        <button id="update-page">다운로드 페이지</button>
         <button id="update-no">닫기</button>
       </div>
+      <p id="update-status" style="display:none;margin-top:12px;font-size:12px;color:#a6e3a1"></p>
     </div>`;
   document.body.appendChild(overlay);
-  document.getElementById("update-yes").addEventListener("click", () => {
-    window.__TAURI__.opener.openUrl(url);
+
+  // 즉시 업그레이드: 다운로드 후 설치
+  document.getElementById("update-install").addEventListener("click", async () => {
+    const btn = document.getElementById("update-install");
+    const status = document.getElementById("update-status");
+    btn.disabled = true;
+    btn.textContent = "다운로드 중...";
+    status.style.display = "block";
+    status.textContent = "설치파일을 다운로드하고 있습니다...";
+    try {
+      await invoke("download_and_install", { downloadUrl: assetUrl });
+    } catch (e) {
+      status.style.color = "#f38ba8";
+      status.textContent = "실패: " + e;
+      btn.disabled = false;
+      btn.textContent = "즉시 업그레이드";
+    }
+  });
+
+  // 다운로드 페이지 열기
+  document.getElementById("update-page").addEventListener("click", () => {
+    window.__TAURI__.opener.openUrl(htmlUrl);
     overlay.remove();
   });
+
   document.getElementById("update-no").addEventListener("click", () => overlay.remove());
 }

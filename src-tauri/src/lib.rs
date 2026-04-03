@@ -261,15 +261,44 @@ fn reorder_tab(state: State<AppState>, from: usize, to: usize) {
     save_tabs(&state.config_path, &tabs);
 }
 
+// 업데이트 확인: (버전, 릴리스페이지, 설치파일URL) 반환
 #[tauri::command]
-async fn check_update() -> Option<(String, String)> {
-    let url = "https://api.github.com/repos/ReachToWisdom/AI-Browser/releases/latest";
-    let client = reqwest::Client::new();
-    let resp = client.get(url).header("User-Agent", "AI-Browser").send().await.ok()?;
-    let json: serde_json::Value = resp.json().await.ok()?;
+fn check_update() -> Option<(String, String, String)> {
+    let resp = ureq::get("https://api.github.com/repos/ReachToWisdom/AI-Browser/releases/latest")
+        .set("User-Agent", "AI-Browser")
+        .call().ok()?;
+    let json: serde_json::Value = resp.into_json().ok()?;
     let tag = json["tag_name"].as_str()?.trim_start_matches('v').to_string();
     let html_url = json["html_url"].as_str()?.to_string();
-    if is_newer(&tag, APP_VERSION) { Some((tag, html_url)) } else { None }
+
+    // 설치파일(setup.exe) 에셋 URL 찾기
+    let asset_url = json["assets"].as_array()
+        .and_then(|assets| assets.iter()
+            .find(|a| a["name"].as_str().map_or(false, |n| n.contains("setup")))
+            .and_then(|a| a["browser_download_url"].as_str().map(|s| s.to_string()))
+        )
+        .unwrap_or_else(|| html_url.clone());
+
+    if is_newer(&tag, APP_VERSION) { Some((tag, html_url, asset_url)) } else { None }
+}
+
+// 설치파일 다운로드 후 실행
+#[tauri::command]
+fn download_and_install(app: tauri::AppHandle, download_url: String) -> Result<(), String> {
+    let temp = std::env::temp_dir().join("AI-Browser-setup.exe");
+    let resp = ureq::get(&download_url)
+        .set("User-Agent", "AI-Browser")
+        .call()
+        .map_err(|e| format!("다운로드 실패: {}", e))?;
+    let mut file = fs::File::create(&temp).map_err(|e| format!("파일 생성 실패: {}", e))?;
+    std::io::copy(&mut resp.into_reader(), &mut file).map_err(|e| format!("저장 실패: {}", e))?;
+
+    // 인스톨러 실행 후 앱 종료
+    std::process::Command::new(&temp)
+        .spawn()
+        .map_err(|e| format!("실행 실패: {}", e))?;
+    app.exit(0);
+    Ok(())
 }
 
 fn is_newer(latest: &str, current: &str) -> bool {
@@ -455,7 +484,7 @@ pub fn run() {
             get_tabs, get_active_tab, switch_tab,
             add_tab, remove_tab, reorder_tab,
             get_presets, check_update, toggle_settings_view,
-            go_back, go_forward, go_home,
+            go_back, go_forward, go_home, download_and_install,
         ])
         .run(tauri::generate_context!())
         .expect("AI Browser 실행 실패");
