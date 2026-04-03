@@ -83,7 +83,7 @@ async function renderSettings() {
   html += '<p style="color:#585b70;font-size:11px;margin-top:6px">▲▼ 화살표로 순서 변경. 최소 1개 유지.</p>';
   html += '<h2>➕ 직접 추가</h2>';
   html += '<div class="form"><input id="add-name" placeholder="이름"><input id="add-url" placeholder="https://..."><button class="btn-add" id="btn-do-add">추가</button></div>';
-  html += '<button class="back-btn" id="btn-back">← 돌아가기</button>';
+  html += '<button class="back-btn" id="btn-back-settings">← 돌아가기</button>';
   html += `<div class="about">AI Browser v${await getVersion()} · 개발자: 혜통</div>`;
   document.getElementById("settings").innerHTML = html;
 
@@ -111,11 +111,8 @@ async function renderSettings() {
     settingsOpen = false;
     document.getElementById("settings").classList.add("hidden");
     await invoke("toggle_settings_view", { open: false });
+    await invoke("switch_tab", { index: activeTab });
     renderTabBar();
-    // 2. 웹뷰 초기화 대기 후 전환
-    setTimeout(async () => {
-      await invoke("switch_tab", { index: activeTab });
-    }, 300);
   }
 
   document.getElementById("preset-list").addEventListener("click", async (e) => {
@@ -140,7 +137,7 @@ async function renderSettings() {
     if (e.key === "Enter") { e.preventDefault(); document.getElementById("add-url").focus(); }
   });
 
-  document.getElementById("btn-back").addEventListener("click", toggleSettings);
+  document.getElementById("btn-back-settings").addEventListener("click", toggleSettings);
 }
 
 function renderTabList() {

@@ -121,7 +121,6 @@ fn get_all_ids(state: &AppState) -> Vec<String> {
 fn toggle_settings_view(app: tauri::AppHandle, state: State<AppState>, open: bool) {
     state.overlay_open.store(open, Ordering::SeqCst);
     let active_id = get_active_id(&state);
-    let all_ids = get_all_ids(&state);
 
     if let Some(win) = app.get_window("main") {
         let size = win.inner_size().unwrap_or(tauri::PhysicalSize { width: 1400, height: 900 });
@@ -137,9 +136,14 @@ fn toggle_settings_view(app: tauri::AppHandle, state: State<AppState>, open: boo
             }
         }
 
-        for id in &all_ids {
-            if let Some(wv) = app.get_webview(id) {
-                if !open && active_id.as_deref() == Some(id) {
+        let all_tabs: Vec<TabItem> = state.tabs.lock().unwrap().clone();
+        for tab in &all_tabs {
+            // 닫힐 때 활성 탭 웹뷰가 없으면 생성
+            if !open && active_id.as_deref() == Some(tab.id.as_str()) {
+                ensure_webview(&app, &win, tab);
+            }
+            if let Some(wv) = app.get_webview(&tab.id) {
+                if !open && active_id.as_deref() == Some(tab.id.as_str()) {
                     wv.set_position(LogicalPosition::new(0.0, TABBAR_H)).ok();
                     wv.set_size(LogicalSize::new(w, h - TABBAR_H)).ok();
                 } else {
@@ -188,24 +192,26 @@ fn go_home(app: tauri::AppHandle, state: State<AppState>) {
     };
     if !id.is_empty() {
         if let Some(wv) = app.get_webview(&id) {
-            wv.eval(&format!("window.location.href = '{}'", url)).ok();
+            let safe_url = url.replace('\'', "%27");
+            wv.eval(&format!("window.location.href = '{}'", safe_url)).ok();
         }
     }
 }
 
-// 탭 전환
+// 탭 전환 (lazy webview 생성 포함)
 #[tauri::command]
 fn switch_tab(app: tauri::AppHandle, state: State<AppState>, index: usize) {
-    let (target_id, all_ids) = {
+    let (target_tab, all_tabs) = {
         let tabs = state.tabs.lock().unwrap();
         if index >= tabs.len() { return; }
-        let target = tabs[index].id.clone();
-        let all: Vec<String> = tabs.iter().map(|t| t.id.clone()).collect();
-        (target, all)
+        (tabs[index].clone(), tabs.clone())
     };
     *state.active_tab.lock().unwrap() = index;
 
     if let Some(win) = app.get_window("main") {
+        // 대상 탭 웹뷰가 없으면 생성
+        ensure_webview(&app, &win, &target_tab);
+
         let size = win.inner_size().unwrap_or(tauri::PhysicalSize { width: 1400, height: 900 });
         let scale = win.scale_factor().unwrap_or(1.0);
         let w = size.width as f64 / scale;
@@ -215,9 +221,9 @@ fn switch_tab(app: tauri::AppHandle, state: State<AppState>, index: usize) {
             main_wv.set_size(LogicalSize::new(w, TABBAR_H)).ok();
         }
 
-        for id in &all_ids {
-            if let Some(wv) = app.get_webview(id) {
-                if *id == target_id {
+        for tab in &all_tabs {
+            if let Some(wv) = app.get_webview(&tab.id) {
+                if tab.id == target_tab.id {
                     wv.set_position(LogicalPosition::new(0.0, TABBAR_H)).ok();
                     wv.set_size(LogicalSize::new(w, h - TABBAR_H)).ok();
                 } else {
@@ -246,29 +252,26 @@ fn same_tab_script() -> &'static str {
 })();"#
 }
 
-// 탭 추가 (웹뷰 생성만 담당, 화면 전환은 JS에서)
+// 탭 추가 (상태만 저장, 웹뷰는 switch_tab에서 lazy 생성)
 #[tauri::command]
-fn add_tab(app: tauri::AppHandle, state: State<AppState>, name: String, url: String, color: String) -> usize {
-    let (id, url, new_idx) = {
-        let mut tabs = state.tabs.lock().unwrap();
-        let url = if url.contains("://") { url } else { format!("https://{}", url) };
-        let id = gen_id(&state.next_id);
-        let new_idx = tabs.len();
-        tabs.push(TabItem { name, url: url.clone(), color, id: id.clone() });
-        save_tabs(&state.config_path, &tabs);
-        (id, url, new_idx)
-    };
-
-    if let Some(win) = app.get_window("main") {
-        if let Ok(parsed) = url.parse() {
-            let builder = WebviewBuilder::new(&id, tauri::WebviewUrl::External(parsed))
-                .initialization_script(same_tab_script());
-            // 숨겨진 위치에 생성 (switch_tab에서 표시)
-            win.add_child(builder, LogicalPosition::new(-10000.0, -10000.0), LogicalSize::new(1.0, 1.0)).ok();
-        }
-    }
-
+fn add_tab(state: State<AppState>, name: String, url: String, color: String) -> usize {
+    let mut tabs = state.tabs.lock().unwrap();
+    let url = if url.contains("://") { url } else { format!("https://{}", url) };
+    let id = gen_id(&state.next_id);
+    let new_idx = tabs.len();
+    tabs.push(TabItem { name, url: url.clone(), color, id: id.clone() });
+    save_tabs(&state.config_path, &tabs);
     new_idx
+}
+
+// 웹뷰가 없으면 생성
+fn ensure_webview(app: &tauri::AppHandle, win: &tauri::Window, tab: &TabItem) {
+    if app.get_webview(&tab.id).is_some() { return; }
+    if let Ok(parsed) = tab.url.parse() {
+        let builder = WebviewBuilder::new(&tab.id, tauri::WebviewUrl::External(parsed))
+            .initialization_script(same_tab_script());
+        win.add_child(builder, LogicalPosition::new(-10000.0, -10000.0), LogicalSize::new(0.0, 0.0)).ok();
+    }
 }
 
 #[tauri::command]
