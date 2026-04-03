@@ -25,8 +25,8 @@ const (
 
 // 업데이트 확인 (백그라운드)
 func startUpdateChecker() {
-	// 시작 후 10초 대기 (앱 초기화 완료 후)
-	time.Sleep(10 * time.Second)
+	// 시작 후 1초 대기 (앱 초기화 완료 후)
+	time.Sleep(1 * time.Second)
 	checkForUpdate()
 }
 
