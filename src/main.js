@@ -23,7 +23,6 @@ function renderTabBar() {
   let html = '<button class="tab-btn" id="btn-back" title="뒤로">◀</button>';
   html += '<button class="tab-btn" id="btn-forward" title="앞으로">▶</button>';
   html += '<button class="tab-btn" id="btn-refresh" title="새로고침">↻</button>';
-  html += '<button class="tab-btn tab-scroll-btn" id="btn-scroll-left" title="탭 왼쪽">‹</button>';
   html += '<div id="tab-scroll-area">';
   tabs.forEach((tab, i) => {
     const domain = new URL(tab.url).hostname;
@@ -35,7 +34,8 @@ function renderTabBar() {
     </button>`;
   });
   html += '</div>';
-  html += '<button class="tab-btn tab-scroll-btn" id="btn-scroll-right" title="탭 오른쪽">›</button>';
+  html += '<button class="tab-btn tab-scroll-btn" id="btn-scroll-left" title="탭 왼쪽 스크롤">◁</button>';
+  html += '<button class="tab-btn tab-scroll-btn" id="btn-scroll-right" title="탭 오른쪽 스크롤">▷</button>';
   html += '<button class="tab-btn" id="btn-settings" title="설정">⚙</button>';
   bar.innerHTML = html;
 
@@ -55,12 +55,16 @@ function renderTabBar() {
   const activeBtn = scrollArea.querySelector(".tab.active");
   if (activeBtn) activeBtn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
 
-  // 탭 스크롤 버튼
+  // 탭 스크롤 버튼 (탭 1개 단위)
   document.getElementById("btn-scroll-left").addEventListener("click", () => {
-    scrollArea.scrollBy({ left: -150, behavior: "smooth" });
+    const tabBtn = scrollArea.querySelector(".tab");
+    const step = tabBtn ? tabBtn.offsetWidth + 6 : 120;
+    scrollArea.scrollLeft -= step;
   });
   document.getElementById("btn-scroll-right").addEventListener("click", () => {
-    scrollArea.scrollBy({ left: 150, behavior: "smooth" });
+    const tabBtn = scrollArea.querySelector(".tab");
+    const step = tabBtn ? tabBtn.offsetWidth + 6 : 120;
+    scrollArea.scrollLeft += step;
   });
 
   document.getElementById("btn-back").addEventListener("click", () => invoke("go_back"));
