@@ -4,6 +4,21 @@ let tabs = [];
 let activeTab = 0;
 let settingsOpen = false;
 
+// 메일 등 서브도메인 → 루트 도메인 favicon 매핑
+const FAVICON_HOST_MAP = {
+  "mail.naver.com": "www.naver.com",
+  "mail.daum.net": "daum.net",
+};
+function faviconUrl(url) {
+  try {
+    const host = new URL(url).hostname;
+    const domain = FAVICON_HOST_MAP[host] || host;
+    return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+  } catch {
+    return "";
+  }
+}
+
 window.addEventListener("DOMContentLoaded", async () => {
   tabs = await invoke("get_tabs");
   activeTab = await invoke("get_active_tab");
@@ -25,8 +40,7 @@ function renderTabBar() {
   html += '<button class="tab-btn" id="btn-refresh" title="새로고침">↻</button>';
   html += '<div id="tab-scroll-area">';
   tabs.forEach((tab, i) => {
-    const domain = new URL(tab.url).hostname;
-    const favicon = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+    const favicon = faviconUrl(tab.url);
     html += `<button class="tab${i === activeTab && !settingsOpen ? ' active' : ''}" data-idx="${i}">
       <img class="tab-icon" src="${favicon}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'" />
       <span class="dot" style="background:${tab.color};display:none"></span>
@@ -117,8 +131,7 @@ async function renderSettings() {
   // 프리셋
   document.getElementById("preset-list").innerHTML = presets.map(p => {
     const added = tabs.some(t => t.url === p.url);
-    const domain = new URL(p.url).hostname;
-    const favicon = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+    const favicon = faviconUrl(p.url);
     return `<div class="item">
       <img class="item-icon" src="${favicon}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'" />
       <span class="dot" style="background:${p.color};display:none"></span>
@@ -162,8 +175,7 @@ async function renderSettings() {
 
 function renderTabList() {
   document.getElementById("tab-list").innerHTML = tabs.map((t, i) => {
-    const domain = new URL(t.url).hostname;
-    const favicon = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+    const favicon = faviconUrl(t.url);
     return `<div class="item">
     <span class="order-num">${i + 1}</span>
     <button class="btn-arrow" ${i === 0 ? "disabled" : ""} data-from="${i}" data-to="${i - 1}">▲</button>

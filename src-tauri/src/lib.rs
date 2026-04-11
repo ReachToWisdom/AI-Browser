@@ -12,6 +12,11 @@ use tauri::{
 };
 
 const TABBAR_H: f64 = 48.0;
+// macOS 네이티브 타이틀바 높이 — 자식 WebView 좌표가 NSWindow 프레임 기준이라 오프셋 필요
+#[cfg(target_os = "macos")]
+const TITLEBAR_H: f64 = 28.0;
+#[cfg(not(target_os = "macos"))]
+const TITLEBAR_H: f64 = 0.0;
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // 탭 설정 (id 필드 추가, 기존 config 호환)
@@ -143,7 +148,7 @@ fn toggle_settings_view(app: tauri::AppHandle, state: State<AppState>, open: boo
             if is_active {
                 // 활성 탭 웹뷰 ensure 후 직접 참조 사용
                 if let Some(wv) = ensure_webview(&app, &win, tab) {
-                    wv.set_position(LogicalPosition::new(0.0, TABBAR_H)).ok();
+                    wv.set_position(LogicalPosition::new(0.0, TITLEBAR_H + TABBAR_H)).ok();
                     wv.set_size(LogicalSize::new(w, h - TABBAR_H)).ok();
                 }
             } else {
@@ -224,7 +229,7 @@ fn switch_tab(app: tauri::AppHandle, state: State<AppState>, index: usize) {
 
         // 대상 탭 웹뷰 표시 (ensure_webview에서 직접 받은 참조 사용)
         if let Some(wv) = target_wv {
-            wv.set_position(LogicalPosition::new(0.0, TABBAR_H)).ok();
+            wv.set_position(LogicalPosition::new(0.0, TITLEBAR_H + TABBAR_H)).ok();
             wv.set_size(LogicalSize::new(w, h - TABBAR_H)).ok();
         }
 
@@ -417,7 +422,7 @@ pub fn run() {
             let win = app.get_window("main").unwrap();
 
             if let Some(main_wv) = app.get_webview("main") {
-                main_wv.set_position(LogicalPosition::new(0.0, 0.0)).ok();
+                main_wv.set_position(LogicalPosition::new(0.0, TITLEBAR_H)).ok();
                 main_wv.set_size(LogicalSize::new(1400.0, TABBAR_H)).ok();
             }
 
@@ -427,16 +432,43 @@ pub fn run() {
             let h = size.height as f64 / scale;
 
             // 각 탭에 대해 webview 생성 (id 기반 라벨)
+            let first_tab_id = tabs.first().map(|t| t.id.clone());
             for (i, tab) in tabs.iter().enumerate() {
                 let url: tauri::WebviewUrl = tauri::WebviewUrl::External(tab.url.parse().unwrap());
                 let builder = WebviewBuilder::new(&tab.id, url)
                     .initialization_script(same_tab_script());
 
                 if i == 0 {
-                    win.add_child(builder, LogicalPosition::new(0.0, TABBAR_H), LogicalSize::new(w, h - TABBAR_H)).ok();
+                    win.add_child(builder, LogicalPosition::new(0.0, TITLEBAR_H + TABBAR_H), LogicalSize::new(w, h - TABBAR_H)).ok();
                 } else {
                     win.add_child(builder, LogicalPosition::new(-10000.0, -10000.0), LogicalSize::new(0.0, 0.0)).ok();
                 }
+            }
+
+            // macOS: 초기 inner_size 미실현으로 첫 탭이 공백 표시되는 문제 회피
+            // 창이 실제로 표시된 후 첫 탭 위치/크기 재적용
+            if let Some(first_id) = first_tab_id {
+                let app_handle_init = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    tauri::async_runtime::spawn_blocking(|| {
+                        std::thread::sleep(std::time::Duration::from_millis(300));
+                    }).await.ok();
+                    if let Some(win) = app_handle_init.get_window("main") {
+                        let size = win.inner_size().unwrap_or(tauri::PhysicalSize { width: 1400, height: 900 });
+                        let scale = win.scale_factor().unwrap_or(1.0);
+                        let w = size.width as f64 / scale;
+                        let h = size.height as f64 / scale;
+                        if let Some(main_wv) = app_handle_init.get_webview("main") {
+                            main_wv.set_position(LogicalPosition::new(0.0, TITLEBAR_H)).ok();
+                            main_wv.set_size(LogicalSize::new(w, TABBAR_H)).ok();
+                        }
+                        if let Some(wv) = app_handle_init.get_webview(&first_id) {
+                            wv.set_position(LogicalPosition::new(0.0, TITLEBAR_H + TABBAR_H)).ok();
+                            wv.set_size(LogicalSize::new(w, h - TABBAR_H)).ok();
+                            wv.eval("location.reload()").ok();
+                        }
+                    }
+                });
             }
 
             // 시스템 트레이
@@ -532,7 +564,7 @@ pub fn run() {
                         for id in &all_ids {
                             if let Some(wv) = app_handle.get_webview(id) {
                                 if active_id.as_deref() == Some(id.as_str()) {
-                                    wv.set_position(LogicalPosition::new(0.0, TABBAR_H)).ok();
+                                    wv.set_position(LogicalPosition::new(0.0, TITLEBAR_H + TABBAR_H)).ok();
                                     wv.set_size(LogicalSize::new(w, h - TABBAR_H)).ok();
                                 }
                             }
