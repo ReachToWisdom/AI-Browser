@@ -326,6 +326,54 @@ fn restart_app(app: tauri::AppHandle) {
     app.restart();
 }
 
+// 설정에서 일괄 저장: 탭 목록 교체 (id 비어있으면 신규 발급, 제거된 웹뷰 숨김)
+#[tauri::command]
+fn replace_tabs(app: tauri::AppHandle, state: State<AppState>, new_tabs: Vec<TabItem>) -> Vec<TabItem> {
+    let old_ids: Vec<String> = {
+        let tabs = state.tabs.lock().unwrap();
+        tabs.iter().map(|t| t.id.clone()).collect()
+    };
+
+    // 빈 id에 신규 발급
+    let mut processed: Vec<TabItem> = Vec::with_capacity(new_tabs.len());
+    for mut t in new_tabs {
+        if t.id.is_empty() {
+            t.id = gen_id(&state.next_id);
+        }
+        if !t.url.contains("://") {
+            t.url = format!("https://{}", t.url);
+        }
+        processed.push(t);
+    }
+
+    // 제거된 탭 웹뷰 숨김
+    let new_id_set: std::collections::HashSet<String> = processed.iter().map(|t| t.id.clone()).collect();
+    for old_id in &old_ids {
+        if !new_id_set.contains(old_id) {
+            if let Some(wv) = app.get_webview(old_id) {
+                wv.set_position(LogicalPosition::new(-10000.0, -10000.0)).ok();
+                wv.set_size(LogicalSize::new(0.0, 0.0)).ok();
+            }
+        }
+    }
+
+    // 상태/디스크 갱신
+    {
+        let mut tabs = state.tabs.lock().unwrap();
+        *tabs = processed.clone();
+        save_tabs(&state.config_path, &tabs);
+    }
+    {
+        let tabs = state.tabs.lock().unwrap();
+        let mut active = state.active_tab.lock().unwrap();
+        if *active >= tabs.len() {
+            *active = tabs.len().saturating_sub(1);
+        }
+    }
+
+    processed
+}
+
 #[tauri::command]
 fn get_version() -> String {
     APP_VERSION.to_string()
@@ -492,7 +540,7 @@ pub fn run() {
                         }
                         "about" => {
                             if let Some(wv) = app.get_webview_window("main") {
-                                wv.eval(&format!("alert('AI Browser v{}\\n\\n개발자: 혜통')", APP_VERSION)).ok();
+                                wv.eval(&format!("alert('AI Browser v{}\\n\\n개발자: 정성광')", APP_VERSION)).ok();
                             }
                         }
                         "quit" => {
@@ -577,7 +625,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_tabs, get_active_tab, switch_tab,
-            add_tab, remove_tab, reorder_tab,
+            add_tab, remove_tab, reorder_tab, replace_tabs,
             get_presets, check_update, toggle_settings_view,
             go_back, go_forward, go_home, download_and_install, get_version, restart_app,
         ])

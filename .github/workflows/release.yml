@@ -62,8 +62,14 @@ jobs:
             - **AI.Browser_*_x64.dmg** — Intel 설치 파일
             - **.app.tar.gz** — 실행 파일 (Tauri updater 형식)
 
+            > **macOS 최초 실행 안내**
+            > 앱이 Apple Developer ID로 서명되지 않아 "손상됨" 또는 "확인되지 않은 개발자" 경고가 뜰 수 있습니다.
+            > 다음 중 한 가지 방법을 사용하세요:
+            > 1. Finder에서 앱을 **우클릭 → 열기** → 경고창에서 "열기" 클릭
+            > 2. 터미널에서 한 줄 실행: `xattr -cr "/Applications/AI Browser.app"`
+
             ---
-            제작: 혜통
+            개발자: 정성광
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

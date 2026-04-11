@@ -3,6 +3,9 @@ const { invoke } = window.__TAURI__.core;
 let tabs = [];
 let activeTab = 0;
 let settingsOpen = false;
+// 설정 화면 진입 시 초기화되는 임시 버퍼 — 저장 클릭 시에만 커밋
+let pendingTabs = null;
+let pendingDirty = false;
 
 // 메일 등 서브도메인 → 루트 도메인 favicon 매핑
 const FAVICON_HOST_MAP = {
@@ -107,30 +110,97 @@ function refreshCurrentTab() {
 
 // 설정 토글
 async function toggleSettings() {
+  if (settingsOpen && pendingDirty) {
+    if (!confirm("저장하지 않은 변경사항이 있습니다. 버릴까요?")) return;
+  }
   settingsOpen = !settingsOpen;
+  if (settingsOpen) {
+    // 열 때 현재 탭의 스냅샷으로 버퍼 초기화
+    pendingTabs = tabs.map(t => ({ ...t }));
+    pendingDirty = false;
+  } else {
+    pendingTabs = null;
+    pendingDirty = false;
+  }
   document.getElementById("settings").classList.toggle("hidden", !settingsOpen);
   await invoke("toggle_settings_view", { open: settingsOpen });
   if (settingsOpen) renderSettings();
   renderTabBar();
 }
 
+// 변경사항 커밋 (저장 버튼)
+async function commitPendingTabs() {
+  if (!pendingTabs) return;
+  const saved = await invoke("replace_tabs", { newTabs: pendingTabs });
+  tabs = saved;
+  if (activeTab >= tabs.length) activeTab = Math.max(0, tabs.length - 1);
+  pendingTabs = null;
+  pendingDirty = false;
+  settingsOpen = false;
+  document.getElementById("settings").classList.add("hidden");
+  await invoke("toggle_settings_view", { open: false });
+  await invoke("switch_tab", { index: activeTab });
+  renderTabBar();
+}
+
 // 설정 페이지
 async function renderSettings() {
   const presets = await invoke("get_presets");
-  tabs = await invoke("get_tabs");
 
   let html = '<h2>📌 AI 프리셋 (원클릭 추가)</h2><div id="preset-list"></div>';
-  html += '<h2>📋 현재 탭</h2><div id="tab-list"></div>';
+  html += '<h2>📋 현재 탭 <span id="dirty-flag" style="color:#f9e2af;font-size:12px;margin-left:8px;display:none">● 저장되지 않음</span></h2><div id="tab-list"></div>';
   html += '<p style="color:#585b70;font-size:11px;margin-top:6px">▲▼ 화살표로 순서 변경. 최소 1개 유지.</p>';
   html += '<h2>➕ 직접 추가</h2>';
   html += '<div class="form"><input id="add-name" placeholder="이름"><input id="add-url" placeholder="https://..."><button class="btn-add" id="btn-do-add">추가</button></div>';
-  html += '<button class="back-btn" id="btn-back-settings">← 돌아가기</button>';
-  html += `<div class="about">AI Browser v${await getVersion()} · 개발자: 혜통</div>`;
+  html += '<div class="form" style="margin-top:16px;gap:8px"><button class="btn-add" id="btn-save" style="flex:1;background:#a6e3a1;color:#1e1e2e;font-weight:600">💾 저장</button><button class="back-btn" id="btn-back-settings" style="flex:1">← 취소</button></div>';
+  html += `<div class="about">AI Browser v${await getVersion()} · 개발자: 정성광</div>`;
   document.getElementById("settings").innerHTML = html;
 
-  // 프리셋
+  renderPresetList(presets);
+  renderTabList();
+
+  document.getElementById("preset-list").addEventListener("click", (e) => {
+    const btn = e.target.closest(".btn-add:not([disabled])");
+    if (!btn) return;
+    pendingTabs.push({ name: btn.dataset.name, url: btn.dataset.url, color: btn.dataset.color, id: "" });
+    markDirty();
+    renderPresetList(presets);
+    renderTabList();
+  });
+
+  function doAddTab() {
+    const name = document.getElementById("add-name").value.trim();
+    const url = document.getElementById("add-url").value.trim();
+    if (!name || !url) { alert("이름과 URL을 입력하세요"); return; }
+    pendingTabs.push({ name, url, color: "#888888", id: "" });
+    markDirty();
+    document.getElementById("add-name").value = "";
+    document.getElementById("add-url").value = "";
+    renderPresetList(presets);
+    renderTabList();
+  }
+
+  document.getElementById("btn-do-add").addEventListener("click", doAddTab);
+  document.getElementById("add-url").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); doAddTab(); }
+  });
+  document.getElementById("add-name").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); document.getElementById("add-url").focus(); }
+  });
+
+  document.getElementById("btn-save").addEventListener("click", commitPendingTabs);
+  document.getElementById("btn-back-settings").addEventListener("click", toggleSettings);
+}
+
+function markDirty() {
+  pendingDirty = true;
+  const flag = document.getElementById("dirty-flag");
+  if (flag) flag.style.display = "inline";
+}
+
+function renderPresetList(presets) {
   document.getElementById("preset-list").innerHTML = presets.map(p => {
-    const added = tabs.some(t => t.url === p.url);
+    const added = pendingTabs.some(t => t.url === p.url);
     const favicon = faviconUrl(p.url);
     return `<div class="item">
       <img class="item-icon" src="${favicon}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'" />
@@ -140,69 +210,42 @@ async function renderSettings() {
         : `<button class="btn-add" data-name="${p.name}" data-url="${p.url}" data-color="${p.color}">추가</button>`}
     </div>`;
   }).join("");
-
-  renderTabList();
-
-  async function addAndSwitch(name, url, color) {
-    await invoke("add_tab", { name, url, color });
-    await invoke("restart_app");
-  }
-
-  document.getElementById("preset-list").addEventListener("click", async (e) => {
-    const btn = e.target.closest(".btn-add:not([disabled])");
-    if (!btn) return;
-    await addAndSwitch(btn.dataset.name, btn.dataset.url, btn.dataset.color);
-  });
-
-  async function doAddTab() {
-    const name = document.getElementById("add-name").value.trim();
-    const url = document.getElementById("add-url").value.trim();
-    if (!name || !url) { alert("이름과 URL을 입력하세요"); return; }
-    await addAndSwitch(name, url, "#888888");
-  }
-
-  document.getElementById("btn-do-add").addEventListener("click", doAddTab);
-  // 엔터키로 추가
-  document.getElementById("add-url").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); doAddTab(); }
-  });
-  document.getElementById("add-name").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); document.getElementById("add-url").focus(); }
-  });
-
-  document.getElementById("btn-back-settings").addEventListener("click", toggleSettings);
 }
 
 function renderTabList() {
-  document.getElementById("tab-list").innerHTML = tabs.map((t, i) => {
+  const list = pendingTabs || tabs;
+  document.getElementById("tab-list").innerHTML = list.map((t, i) => {
     const favicon = faviconUrl(t.url);
     return `<div class="item">
     <span class="order-num">${i + 1}</span>
     <button class="btn-arrow" ${i === 0 ? "disabled" : ""} data-from="${i}" data-to="${i - 1}">▲</button>
-    <button class="btn-arrow" ${i === tabs.length - 1 ? "disabled" : ""} data-from="${i}" data-to="${i + 1}">▼</button>
+    <button class="btn-arrow" ${i === list.length - 1 ? "disabled" : ""} data-from="${i}" data-to="${i + 1}">▼</button>
     <img class="item-icon" src="${favicon}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'" />
     <span class="dot" style="background:${t.color};display:none"></span>
     <span class="name">${t.name}</span><span class="url">${t.url}</span>
-    ${tabs.length > 1 ? `<button class="btn-del" data-idx="${i}">삭제</button>` : ""}
+    ${list.length > 1 ? `<button class="btn-del" data-idx="${i}">삭제</button>` : ""}
   </div>`;
   }).join("");
 
   document.getElementById("tab-list").querySelectorAll(".btn-arrow:not([disabled])").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      await invoke("reorder_tab", { from: parseInt(btn.dataset.from), to: parseInt(btn.dataset.to) });
-      tabs = await invoke("get_tabs");
+    btn.addEventListener("click", () => {
+      const from = parseInt(btn.dataset.from);
+      const to = parseInt(btn.dataset.to);
+      const moved = pendingTabs.splice(from, 1)[0];
+      pendingTabs.splice(to, 0, moved);
+      markDirty();
       renderTabList();
-      renderTabBar();
     });
   });
 
   document.getElementById("tab-list").querySelectorAll(".btn-del").forEach(btn => {
     btn.addEventListener("click", async () => {
-      await invoke("remove_tab", { index: parseInt(btn.dataset.idx) });
-      tabs = await invoke("get_tabs");
-      if (activeTab >= tabs.length) activeTab = tabs.length - 1;
+      const idx = parseInt(btn.dataset.idx);
+      pendingTabs.splice(idx, 1);
+      markDirty();
+      const presets = await invoke("get_presets");
+      renderPresetList(presets);
       renderTabList();
-      renderTabBar();
     });
   });
 }
