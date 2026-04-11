@@ -9,35 +9,61 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: windows-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
+          - platform: 'windows-latest'
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          go-version: '1.25'
+          node-version: '20'
 
-      # winres 리소스 생성
-      - name: Install go-winres
-        run: go install github.com/tc-hib/go-winres@latest
-
-      - name: Generate Windows resources
-        run: go-winres make
-
-      # 빌드 (GUI 모드, 콘솔 창 없음)
-      - name: Build
-        run: go build -ldflags "-H windowsgui -s -w" -o AI_Browser.exe .
-
-      # ZIP 패키징
-      - name: Package
-        run: Compress-Archive -Path AI_Browser.exe -DestinationPath AI_Browser_${{ github.ref_name }}.zip
-
-      # GitHub Releases에 업로드
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
         with:
-          files: |
-            AI_Browser.exe
-            AI_Browser_${{ github.ref_name }}.zip
-          generate_release_notes: true
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Build and release Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'AI Browser ${{ github.ref_name }}'
+          releaseBody: |
+            ## 다운로드
+
+            ### Windows
+            - **AI.Browser_*_x64-setup.exe** — 설치 파일
+            - **ai-browser.exe** — 실행 파일 (portable)
+
+            ### macOS
+            - **AI.Browser_*_aarch64.dmg** — Apple Silicon 설치 파일
+            - **AI.Browser_*_x64.dmg** — Intel 설치 파일
+            - **.app.tar.gz** — 실행 파일 (Tauri updater 형식)
+
+            ---
+            제작: 혜통
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
