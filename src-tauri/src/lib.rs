@@ -387,9 +387,18 @@ fn check_update() -> Option<(String, String, String)> {
     let json: serde_json::Value = resp.into_json().ok()?;
     let tag = json["tag_name"].as_str()?.trim_start_matches('v').to_string();
     let html_url = json["html_url"].as_str()?.to_string();
+
+    // OS별로 적절한 설치 파일 찾기
+    #[cfg(target_os = "windows")]
+    let file_pattern = "setup.exe";
+    #[cfg(target_os = "macos")]
+    let file_pattern = ".dmg";
+    #[cfg(target_os = "linux")]
+    let file_pattern = ".AppImage";
+
     let asset_url = json["assets"].as_array()
         .and_then(|assets| assets.iter()
-            .find(|a| a["name"].as_str().map_or(false, |n| n.contains("setup")))
+            .find(|a| a["name"].as_str().map_or(false, |n| n.contains(file_pattern)))
             .and_then(|a| a["browser_download_url"].as_str().map(|s| s.to_string()))
         )
         .unwrap_or_else(|| html_url.clone());
@@ -400,30 +409,58 @@ fn check_update() -> Option<(String, String, String)> {
 fn download_and_install(app: tauri::AppHandle, download_url: String) -> Result<(), String> {
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
-    let setup_path = std::env::temp_dir().join(format!("AI-Browser-setup-{}.exe", timestamp));
-    let bat_path = std::env::temp_dir().join(format!("AI-Browser-update-{}.bat", timestamp));
 
+    // 다운로드
     let resp = ureq::get(&download_url)
         .set("User-Agent", "AI-Browser")
         .call()
         .map_err(|e| format!("다운로드 실패: {}", e))?;
-    let mut file = fs::File::create(&setup_path).map_err(|e| format!("파일 생성 실패: {}", e))?;
-    std::io::copy(&mut resp.into_reader(), &mut file).map_err(|e| format!("저장 실패: {}", e))?;
-    drop(file);
 
-    let script = format!(
-        "@echo off\r\nping 127.0.0.1 -n 3 >nul\r\nstart \"\" \"{}\"\r\ndel \"%~f0\"\r\n",
-        setup_path.to_string_lossy()
-    );
-    fs::write(&bat_path, &script).map_err(|e| format!("스크립트 생성 실패: {}", e))?;
+    #[cfg(target_os = "windows")]
+    {
+        let setup_path = std::env::temp_dir().join(format!("AI-Browser-setup-{}.exe", timestamp));
+        let bat_path = std::env::temp_dir().join(format!("AI-Browser-update-{}.bat", timestamp));
 
-    let mut cmd = std::process::Command::new(&bat_path);
-    #[cfg(windows)]
-    cmd.creation_flags(0x08000000);
-    cmd.spawn().map_err(|e| format!("실행 실패: {}", e))?;
+        let mut file = fs::File::create(&setup_path).map_err(|e| format!("파일 생성 실패: {}", e))?;
+        std::io::copy(&mut resp.into_reader(), &mut file).map_err(|e| format!("저장 실패: {}", e))?;
+        drop(file);
 
-    app.exit(0);
-    Ok(())
+        let script = format!(
+            "@echo off\r\nping 127.0.0.1 -n 3 >nul\r\nstart \"\" \"{}\"\r\ndel \"%~f0\"\r\n",
+            setup_path.to_string_lossy()
+        );
+        fs::write(&bat_path, &script).map_err(|e| format!("스크립트 생성 실패: {}", e))?;
+
+        let mut cmd = std::process::Command::new(&bat_path);
+        cmd.creation_flags(0x08000000);
+        cmd.spawn().map_err(|e| format!("실행 실패: {}", e))?;
+
+        app.exit(0);
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let dmg_path = std::env::temp_dir().join(format!("AI-Browser-{}.dmg", timestamp));
+
+        let mut file = fs::File::create(&dmg_path).map_err(|e| format!("파일 생성 실패: {}", e))?;
+        std::io::copy(&mut resp.into_reader(), &mut file).map_err(|e| format!("저장 실패: {}", e))?;
+        drop(file);
+
+        // DMG 마운트 및 열기
+        std::process::Command::new("open")
+            .arg(&dmg_path)
+            .spawn()
+            .map_err(|e| format!("DMG 열기 실패: {}", e))?;
+
+        app.exit(0);
+        Ok(())
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        Err("지원하지 않는 운영체제입니다".to_string())
+    }
 }
 
 fn is_newer(latest: &str, current: &str) -> bool {

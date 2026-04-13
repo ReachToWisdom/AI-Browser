@@ -1,0 +1,68 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
+          - platform: 'windows-latest'
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Install dependencies (macOS only)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          npm install
+
+      - name: Install dependencies (Windows only)
+        if: matrix.platform == 'windows-latest'
+        run: |
+          npm install
+
+      - name: Build the app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'AI Browser ${{ github.ref_name }}'
+          releaseBody: |
+            ## 변경사항
+            - 환경설정 저장 시 앱 자동 재시작 기능 추가
+            - 새로 추가한 탭이 정상적으로 로드되도록 개선
+
+            **제작자**: 혜통
+
+            ## 다운로드
+            - **Windows**: AI-Browser_*_x64_setup.exe
+            - **macOS (Apple Silicon)**: AI-Browser_*_aarch64.dmg
+            - **macOS (Intel)**: AI-Browser_*_x64.dmg
+
+            ## 자동 업데이트
+            이전 버전 사용자는 앱 실행 시 자동으로 업데이트 알림을 받게 됩니다.
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
