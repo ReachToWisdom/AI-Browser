@@ -1,0 +1,22 @@
+[package]
+name = "ai-browser"
+version = "2.3.2"
+description = "AI 사이트 모아보기 브라우저"
+authors = ["정성광"]
+edition = "2021"
+
+[lib]
+name = "ai_browser_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "unstable"] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = { version = "2", features = ["json"] }
+dirs = "6"
+tauri-plugin-single-instance = "2"

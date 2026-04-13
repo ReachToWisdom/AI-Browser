@@ -1,0 +1,15 @@
+{
+  "name": "ai_browser_v2",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  },
+  "dependencies": {
+    "playwright": "^1.59.1"
+  }
+}
