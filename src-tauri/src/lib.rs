@@ -72,6 +72,14 @@ fn get_presets() -> Vec<TabItem> {
     ]
 }
 
+// 디스크 저장 형식: 탭 목록 + 활성 탭 인덱스
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TabsFile {
+    tabs: Vec<TabItem>,
+    #[serde(default)]
+    active_tab: usize,
+}
+
 fn get_config_path() -> PathBuf {
     let app_data = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
     let dir = app_data.join("AIBrowser");
@@ -79,33 +87,49 @@ fn get_config_path() -> PathBuf {
     dir.join("tabs.json")
 }
 
-fn load_tabs(path: &PathBuf, counter: &AtomicU64) -> Vec<TabItem> {
+fn load_tabs(path: &PathBuf, counter: &AtomicU64) -> (Vec<TabItem>, usize) {
     if let Ok(data) = fs::read_to_string(path) {
+        // 새 형식 (TabsFile) 시도
+        if let Ok(mut file) = serde_json::from_str::<TabsFile>(&data) {
+            if !file.tabs.is_empty() {
+                assign_ids(&mut file.tabs, counter);
+                let active = file.active_tab.min(file.tabs.len().saturating_sub(1));
+                return (file.tabs, active);
+            }
+        }
+        // 기존 형식 (Vec<TabItem>) 호환
         if let Ok(mut tabs) = serde_json::from_str::<Vec<TabItem>>(&data) {
             if !tabs.is_empty() {
-                // 기존 config에 id가 없는 경우 자동 부여
-                for tab in &mut tabs {
-                    if tab.id.is_empty() {
-                        tab.id = gen_id(counter);
-                    }
-                }
-                // counter를 현재 최대값 이상으로 설정
-                let max_id = tabs.iter()
-                    .filter_map(|t| t.id.strip_prefix("tab-").and_then(|s| s.parse::<u64>().ok()))
-                    .max().unwrap_or(0);
-                let current = counter.load(Ordering::SeqCst);
-                if max_id >= current {
-                    counter.store(max_id + 1, Ordering::SeqCst);
-                }
-                return tabs;
+                assign_ids(&mut tabs, counter);
+                return (tabs, 0);
             }
         }
     }
-    default_tabs(counter)
+    (default_tabs(counter), 0)
 }
 
-fn save_tabs(path: &PathBuf, tabs: &[TabItem]) {
-    if let Ok(data) = serde_json::to_string_pretty(tabs) {
+// 탭에 id가 없으면 자동 부여 + counter 동기화
+fn assign_ids(tabs: &mut [TabItem], counter: &AtomicU64) {
+    for tab in tabs.iter_mut() {
+        if tab.id.is_empty() {
+            tab.id = gen_id(counter);
+        }
+    }
+    let max_id = tabs.iter()
+        .filter_map(|t| t.id.strip_prefix("tab-").and_then(|s| s.parse::<u64>().ok()))
+        .max().unwrap_or(0);
+    let current = counter.load(Ordering::SeqCst);
+    if max_id >= current {
+        counter.store(max_id + 1, Ordering::SeqCst);
+    }
+}
+
+fn save_tabs(path: &PathBuf, tabs: &[TabItem], active_tab: usize) {
+    let file = TabsFile {
+        tabs: tabs.to_vec(),
+        active_tab,
+    };
+    if let Ok(data) = serde_json::to_string_pretty(&file) {
         fs::write(path, data).ok();
     }
 }
@@ -213,6 +237,8 @@ fn switch_tab(app: tauri::AppHandle, state: State<AppState>, index: usize) {
         (tabs[index].clone(), tabs.clone())
     };
     *state.active_tab.lock().unwrap() = index;
+    // 활성 탭 인덱스 디스크 저장
+    save_tabs(&state.config_path, &all_tabs, index);
 
     if let Some(win) = app.get_window("main") {
         // 대상 탭 웹뷰가 없으면 생성 (반환값 직접 사용)
@@ -270,7 +296,8 @@ fn add_tab(state: State<AppState>, name: String, url: String, color: String) -> 
     let id = gen_id(&state.next_id);
     let new_idx = tabs.len();
     tabs.push(TabItem { name, url: url.clone(), color, id: id.clone() });
-    save_tabs(&state.config_path, &tabs);
+    let active = *state.active_tab.lock().unwrap();
+    save_tabs(&state.config_path, &tabs, active);
     new_idx
 }
 
@@ -295,12 +322,12 @@ fn remove_tab(app: tauri::AppHandle, state: State<AppState>, index: usize) -> bo
         let mut tabs = state.tabs.lock().unwrap();
         if tabs.len() <= 1 || index >= tabs.len() { return false; }
         let removed = tabs.remove(index);
-        save_tabs(&state.config_path, &tabs);
         // active_tab 조정
         let mut active = state.active_tab.lock().unwrap();
         if *active >= tabs.len() {
             *active = tabs.len() - 1;
         }
+        save_tabs(&state.config_path, &tabs, *active);
         removed.id
     };
 
@@ -318,7 +345,8 @@ fn reorder_tab(state: State<AppState>, from: usize, to: usize) {
     if from >= tabs.len() || to >= tabs.len() { return; }
     let tab = tabs.remove(from);
     tabs.insert(to, tab);
-    save_tabs(&state.config_path, &tabs);
+    let active = *state.active_tab.lock().unwrap();
+    save_tabs(&state.config_path, &tabs, active);
 }
 
 #[tauri::command]
@@ -361,14 +389,11 @@ fn replace_tabs(app: tauri::AppHandle, state: State<AppState>, new_tabs: Vec<Tab
     {
         let mut tabs = state.tabs.lock().unwrap();
         *tabs = processed.clone();
-        save_tabs(&state.config_path, &tabs);
-    }
-    {
-        let tabs = state.tabs.lock().unwrap();
         let mut active = state.active_tab.lock().unwrap();
         if *active >= tabs.len() {
             *active = tabs.len().saturating_sub(1);
         }
+        save_tabs(&state.config_path, &tabs, *active);
     }
 
     processed
@@ -479,11 +504,11 @@ fn is_newer(latest: &str, current: &str) -> bool {
 pub fn run() {
     let config_path = get_config_path();
     let counter = AtomicU64::new(0);
-    let tabs = load_tabs(&config_path, &counter);
+    let (tabs, saved_active) = load_tabs(&config_path, &counter);
     let initial_next_id = counter.load(Ordering::SeqCst);
 
     // id가 새로 부여된 경우 저장
-    save_tabs(&config_path, &tabs);
+    save_tabs(&config_path, &tabs, saved_active);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -495,7 +520,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(AppState {
             tabs: Mutex::new(tabs.clone()),
-            active_tab: Mutex::new(0),
+            active_tab: Mutex::new(saved_active),
             config_path,
             overlay_open: AtomicBool::new(false),
             next_id: AtomicU64::new(initial_next_id),
@@ -516,23 +541,20 @@ pub fn run() {
             let w = size.width as f64 / scale;
             let h = size.height as f64 / scale;
 
-            // 각 탭에 대해 webview 생성 (id 기반 라벨)
-            let first_tab_id = tabs.first().map(|t| t.id.clone());
-            for (i, tab) in tabs.iter().enumerate() {
-                let url: tauri::WebviewUrl = tauri::WebviewUrl::External(tab.url.parse().unwrap());
-                let builder = WebviewBuilder::new(&tab.id, url)
-                    .initialization_script(same_tab_script());
-
-                if i == 0 {
+            // 활성 탭만 WebView 생성 (lazy: 나머지는 switch_tab 시 ensure_webview로 생성)
+            // → 탭 개수 제한 문제 해소 + 시작 속도 향상
+            let active_tab = tabs.get(saved_active).cloned();
+            if let Some(tab) = &active_tab {
+                if let Ok(parsed) = tab.url.parse::<tauri::Url>() {
+                    let builder = WebviewBuilder::new(&tab.id, tauri::WebviewUrl::External(parsed))
+                        .initialization_script(same_tab_script());
                     win.add_child(builder, LogicalPosition::new(0.0, TITLEBAR_H + TABBAR_H), LogicalSize::new(w, h - TABBAR_H)).ok();
-                } else {
-                    win.add_child(builder, LogicalPosition::new(-10000.0, -10000.0), LogicalSize::new(0.0, 0.0)).ok();
                 }
             }
 
-            // macOS: 초기 inner_size 미실현으로 첫 탭이 공백 표시되는 문제 회피
-            // 창이 실제로 표시된 후 첫 탭 위치/크기 재적용
-            if let Some(first_id) = first_tab_id {
+            // macOS: 초기 inner_size 미실현으로 활성 탭이 공백 표시되는 문제 회피
+            if let Some(tab) = active_tab {
+                let active_id = tab.id.clone();
                 let app_handle_init = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     tauri::async_runtime::spawn_blocking(|| {
@@ -547,7 +569,7 @@ pub fn run() {
                             main_wv.set_position(LogicalPosition::new(0.0, TITLEBAR_H)).ok();
                             main_wv.set_size(LogicalSize::new(w, TABBAR_H)).ok();
                         }
-                        if let Some(wv) = app_handle_init.get_webview(&first_id) {
+                        if let Some(wv) = app_handle_init.get_webview(&active_id) {
                             wv.set_position(LogicalPosition::new(0.0, TITLEBAR_H + TABBAR_H)).ok();
                             wv.set_size(LogicalSize::new(w, h - TABBAR_H)).ok();
                             wv.eval("location.reload()").ok();
