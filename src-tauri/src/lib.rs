@@ -46,7 +46,10 @@ fn gen_id(counter: &AtomicU64) -> String {
 fn default_tabs(counter: &AtomicU64) -> Vec<TabItem> {
     vec![
         TabItem { name: "Claude".into(), url: "https://claude.ai".into(), color: "#D2A032".into(), id: gen_id(counter) },
+        TabItem { name: "Codex".into(), url: "https://chatgpt.com/codex".into(), color: "#10A37F".into(), id: gen_id(counter) },
         TabItem { name: "Gemini".into(), url: "https://gemini.google.com".into(), color: "#4285F4".into(), id: gen_id(counter) },
+        TabItem { name: "Meta AI".into(), url: "https://www.meta.ai".into(), color: "#0081FB".into(), id: gen_id(counter) },
+        TabItem { name: "Motif".into(), url: "https://chat.motiftech.io".into(), color: "#111827".into(), id: gen_id(counter) },
         TabItem { name: "ChatGPT".into(), url: "https://chatgpt.com".into(), color: "#10A37F".into(), id: gen_id(counter) },
         TabItem { name: "Grok".into(), url: "https://grok.com".into(), color: "#8C64FF".into(), id: gen_id(counter) },
     ]
@@ -57,18 +60,21 @@ fn default_tabs(counter: &AtomicU64) -> Vec<TabItem> {
 fn get_presets() -> Vec<TabItem> {
     vec![
         TabItem { name: "Claude".into(), url: "https://claude.ai".into(), color: "#D2A032".into(), id: String::new() },
+        TabItem { name: "Codex".into(), url: "https://chatgpt.com/codex".into(), color: "#10A37F".into(), id: String::new() },
         TabItem { name: "Gemini".into(), url: "https://gemini.google.com".into(), color: "#4285F4".into(), id: String::new() },
+        TabItem { name: "Meta AI".into(), url: "https://www.meta.ai".into(), color: "#0081FB".into(), id: String::new() },
+        TabItem { name: "Motif".into(), url: "https://chat.motiftech.io".into(), color: "#111827".into(), id: String::new() },
         TabItem { name: "ChatGPT".into(), url: "https://chatgpt.com".into(), color: "#10A37F".into(), id: String::new() },
         TabItem { name: "Grok".into(), url: "https://grok.com".into(), color: "#8C64FF".into(), id: String::new() },
         TabItem { name: "Perplexity".into(), url: "https://perplexity.ai".into(), color: "#20A8E8".into(), id: String::new() },
         TabItem { name: "Copilot".into(), url: "https://copilot.microsoft.com".into(), color: "#44B6E8".into(), id: String::new() },
         TabItem { name: "NotebookLM".into(), url: "https://notebooklm.google.com".into(), color: "#F5A242".into(), id: String::new() },
         TabItem { name: "AI Studio".into(), url: "https://aistudio.google.com".into(), color: "#4285F4".into(), id: String::new() },
-        TabItem { name: "Poe".into(), url: "https://poe.com".into(), color: "#5599CC".into(), id: String::new() },
-        TabItem { name: "HuggingChat".into(), url: "https://huggingface.co/chat".into(), color: "#FFD400".into(), id: String::new() },
         TabItem { name: "DeepSeek".into(), url: "https://chat.deepseek.com".into(), color: "#4B8CFF".into(), id: String::new() },
         TabItem { name: "Mistral".into(), url: "https://chat.mistral.ai".into(), color: "#FFAC2B".into(), id: String::new() },
         TabItem { name: "Genspark".into(), url: "https://www.genspark.ai".into(), color: "#6C5CE7".into(), id: String::new() },
+        TabItem { name: "Poe".into(), url: "https://poe.com".into(), color: "#5599CC".into(), id: String::new() },
+        TabItem { name: "HuggingChat".into(), url: "https://huggingface.co/chat".into(), color: "#FFD400".into(), id: String::new() },
     ]
 }
 
@@ -271,21 +277,130 @@ fn switch_tab(app: tauri::AppHandle, state: State<AppState>, index: usize) {
     }
 }
 
-fn same_tab_script() -> &'static str {
-    r#"(function() {
-    window.open = function(url) {
-        if (url && url !== '' && url !== 'about:blank' && !url.startsWith('javascript:')) {
-            window.location.href = url;
-        }
-        return window;
+fn is_internal_url(tab_url: &str, target_url: &tauri::Url) -> bool {
+    let scheme = target_url.scheme();
+    if scheme == "about" || scheme == "data" || scheme == "blob" || scheme == "javascript" {
+        return true;
+    }
+    if scheme != "http" && scheme != "https" {
+        return false;
+    }
+
+    let target_host = match target_url.host_str() {
+        Some(h) => h.to_lowercase(),
+        None => return false,
     };
-    document.addEventListener('click', function(e) {
-        var a = e.target.closest('a[target="_blank"]');
-        if (a && a.href && a.href !== '#' && !a.href.startsWith('javascript:')) {
-            e.preventDefault(); window.location.href = a.href;
+
+    // 공통 OAuth 인증 및 인프라 도메인 (로그인/본인인증 유지)
+    let auth_hosts = [
+        "accounts.google.com",
+        "accounts.youtube.com",
+        "myaccount.google.com",
+        "gstatic.com",
+        "googleusercontent.com",
+        "appleid.apple.com",
+        "login.microsoftonline.com",
+        "login.live.com",
+        "auth0.com",
+        "challenges.cloudflare.com",
+        "recaptcha.net",
+        "hcaptcha.com",
+        "kakaocorp.com",
+        "kakao.com",
+        "naver.com",
+        "nid.naver.com",
+        "pass.or.kr",
+        "kmcert.com",
+        "nice.co.kr",
+    ];
+    for ah in &auth_hosts {
+        if target_host == *ah || target_host.ends_with(&format!(".{}", ah)) {
+            return true;
         }
-    }, true);
-})();"#
+    }
+
+    // 탭 원본 도메인 매칭 (동일 도메인 및 서브도메인 내부 이동 허용)
+    if let Ok(parsed_tab) = tab_url.parse::<tauri::Url>() {
+        if let Some(tab_host) = parsed_tab.host_str() {
+            let tab_host = tab_host.to_lowercase();
+            if target_host == tab_host || target_host.ends_with(&format!(".{}", tab_host)) {
+                return true;
+            }
+            let parts: Vec<&str> = tab_host.split('.').collect();
+            if parts.len() >= 2 {
+                let root_domain = format!("{}.{}", parts[parts.len() - 2], parts[parts.len() - 1]);
+                if target_host == root_domain || target_host.ends_with(&format!(".{}", root_domain)) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // 서비스 연관 도메인 (로그인 및 CDN)
+    let pairs = [
+        ("claude.ai", "anthropic.com"),
+        ("chatgpt.com", "openai.com"),
+        ("chatgpt.com", "oaistatic.com"),
+        ("chatgpt.com", "oaiusercontent.com"),
+        ("meta.ai", "facebook.com"),
+        ("meta.ai", "instagram.com"),
+        ("meta.ai", "meta.com"),
+        ("grok.com", "x.ai"),
+        ("grok.com", "x.com"),
+        ("grok.com", "twitter.com"),
+    ];
+    for (s1, s2) in &pairs {
+        if tab_url.contains(s1) && (target_host == *s2 || target_host.ends_with(&format!(".{}", s2))) {
+            return true;
+        }
+        if tab_url.contains(s2) && (target_host == *s1 || target_host.ends_with(&format!(".{}", s1))) {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn create_tab_webview(
+    app: &tauri::AppHandle,
+    win: &tauri::Window,
+    tab: &TabItem,
+    pos: LogicalPosition<f64>,
+    size: LogicalSize<f64>,
+) -> Option<tauri::Webview> {
+    if let Some(wv) = app.get_webview(&tab.id) { return Some(wv); }
+    let parsed = tab.url.parse::<tauri::Url>().ok()?;
+    let tab_url = tab.url.clone();
+    let tab_id = tab.id.clone();
+    let app_handle = app.clone();
+
+    let builder = WebviewBuilder::new(&tab.id, tauri::WebviewUrl::External(parsed))
+        .on_new_window(move |target_url, _features| {
+            if is_internal_url(&tab_url, &target_url) {
+                if let Some(wv) = app_handle.get_webview(&tab_id) {
+                    let safe_url = target_url.as_str().replace('\'', "%27");
+                    wv.eval(&format!("window.location.href = '{}'", safe_url)).ok();
+                }
+            } else if target_url.scheme() == "http" || target_url.scheme() == "https" {
+                let _ = tauri_plugin_opener::open_url(target_url.as_str(), None::<&str>);
+            }
+            tauri::webview::NewWindowResponse::Deny
+        })
+        .on_navigation({
+            let tab_url = tab.url.clone();
+            move |target_url| {
+                if is_internal_url(&tab_url, target_url) {
+                    true
+                } else {
+                    if target_url.scheme() == "http" || target_url.scheme() == "https" {
+                        let _ = tauri_plugin_opener::open_url(target_url.as_str(), None::<&str>);
+                    }
+                    false
+                }
+            }
+        });
+
+    win.add_child(builder, pos, size).ok()
 }
 
 // 탭 추가 (상태만 저장, 웹뷰는 switch_tab에서 lazy 생성)
@@ -303,17 +418,7 @@ fn add_tab(state: State<AppState>, name: String, url: String, color: String) -> 
 
 // 웹뷰가 없으면 생성, 생성된 웹뷰 반환
 fn ensure_webview(app: &tauri::AppHandle, win: &tauri::Window, tab: &TabItem) -> Option<tauri::Webview> {
-    if let Some(wv) = app.get_webview(&tab.id) { return Some(wv); }
-    if let Ok(parsed) = tab.url.parse::<tauri::Url>() {
-        let builder = WebviewBuilder::new(&tab.id, tauri::WebviewUrl::External(parsed))
-            .initialization_script(same_tab_script());
-        match win.add_child(builder, LogicalPosition::new(-10000.0, -10000.0), LogicalSize::new(0.0, 0.0)) {
-            Ok(wv) => Some(wv),
-            Err(_) => None,
-        }
-    } else {
-        None
-    }
+    create_tab_webview(app, win, tab, LogicalPosition::new(-10000.0, -10000.0), LogicalSize::new(0.0, 0.0))
 }
 
 #[tauri::command]
@@ -541,16 +646,15 @@ pub fn run() {
             let w = size.width as f64 / scale;
             let h = size.height as f64 / scale;
 
-            // 활성 탭만 WebView 생성 (lazy: 나머지는 switch_tab 시 ensure_webview로 생성)
-            // → 탭 개수 제한 문제 해소 + 시작 속도 향상
-            let active_tab = tabs.get(saved_active).cloned();
-            if let Some(tab) = &active_tab {
-                if let Ok(parsed) = tab.url.parse::<tauri::Url>() {
-                    let builder = WebviewBuilder::new(&tab.id, tauri::WebviewUrl::External(parsed))
-                        .initialization_script(same_tab_script());
-                    win.add_child(builder, LogicalPosition::new(0.0, TITLEBAR_H + TABBAR_H), LogicalSize::new(w, h - TABBAR_H)).ok();
+            // 각 탭에 대해 webview 사전 생성 (즉각적인 탭 전환 및 설정 토글 보장)
+            for (i, tab) in tabs.iter().enumerate() {
+                if i == saved_active {
+                    create_tab_webview(app.handle(), &win, tab, LogicalPosition::new(0.0, TITLEBAR_H + TABBAR_H), LogicalSize::new(w, h - TABBAR_H));
+                } else {
+                    create_tab_webview(app.handle(), &win, tab, LogicalPosition::new(-10000.0, -10000.0), LogicalSize::new(0.0, 0.0));
                 }
             }
+            let active_tab = tabs.get(saved_active).cloned();
 
             // macOS: 초기 inner_size 미실현으로 활성 탭이 공백 표시되는 문제 회피
             if let Some(tab) = active_tab {
